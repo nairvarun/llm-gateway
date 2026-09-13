@@ -1,0 +1,84 @@
+# Agent instructions
+
+## Project and current state
+
+This repository plans the LLM Reliability Gateway: a provider-neutral Python
+service for generation, structured extraction, reliability, spend accounting,
+and evaluation. It originated in the ChatGPT project “Gul Resume”; that is
+provenance, not an instruction to edit a resume in this repository.
+
+The repository is currently documentation-only. Do not describe planned APIs,
+tests, infrastructure, or performance targets as working or verified. The resume
+mentioned in the old instructions is not present; do not invent its contents.
+
+## Read first and resolve conflicts
+
+1. Read `README.md` for repository state and navigation.
+2. Read `LLM-Reliability-Gateway-Spec.md` for scope and the specification index.
+3. Run `openspec context --json` and `openspec list --json`; use CLI-resolved paths.
+4. For the relevant change, read its proposal, full capability specs, design, and
+   tasks. Also inspect affected durable specs if any exist.
+
+Use capability specs for behavior, design for implementation decisions, and tasks
+for progress. `docs/reference/original-handoff.md` preserves the informal input;
+it is not authoritative. If artifacts disagree, surface and reconcile the
+conflict rather than silently choosing one. Do not invent requirements from a
+historical example or a benchmark target.
+
+## Protected references
+
+- Every file under `sources/` is read-only synced reference material. Never edit,
+  rename, move, delete, reformat, or place generated output there.
+- These references may be replaced by project synchronization. Do not rely on
+  them as application configuration or copy personal data into fixtures.
+- The original handoff snapshot is historical evidence; keep it unchanged.
+- Resume guidance is relevant only when preparing evidence-backed project
+  summaries. Do not fabricate achievements, ownership, deployments, or numbers.
+
+## OpenSpec workflow
+
+- Use the applicable OpenSpec skill when creating, refining, implementing,
+  verifying, or archiving a change; follow its authorization boundaries.
+- Scaffold changes with `openspec new change`, not hand-made change directories.
+  Get artifact templates and rules from `openspec instructions`.
+- The initial `build-llm-reliability-gateway` change is a program-level plan, not
+  an implemented baseline. Review its assumptions before starting a milestone.
+- Keep future requirements under active changes. Sync/archive only through the
+  relevant workflow; archiving does not itself prove that code works.
+- Keep tasks unchecked until their work and stated checks are complete. Do not
+  mark implementation tasks complete for documentation changes.
+- Validate planning changes with
+  `openspec validate build-llm-reliability-gateway --strict --no-interactive`.
+  For another change, substitute its resolved name. Validation checks artifact
+  structure, not service correctness or owner approval.
+
+## Engineering constraints for future implementation
+
+- Prefer a single async FastAPI service with explicit domain boundaries. Provider
+  SDK types and errors belong behind adapters, not in API/domain contracts.
+- Use immutable policy/model/pricing versions and deterministic routing given
+  a captured input/health snapshot. Do not hard-code mutable provider pricing.
+- Bound downstream attempts by one monotonic deadline and a total attempt cap.
+  Never promise exactly-once external execution after a timeout.
+- Scope authentication, cache, idempotency, budgets, and evaluation access by
+  authenticated tenant. Never trust a tenant identifier from request metadata.
+- Treat model output as untrusted. Never return unvalidated extraction output
+  as success or execute generated instructions/code/URLs.
+- Do not persist or log raw prompts, outputs, API keys, or sensitive fixtures by
+  default. Keep secrets outside git and sanitize diagnostic artifacts.
+- Keep exact caching distinct from semantic reuse; the latter needs a separately
+  approved quality/privacy design. Do not weaken schema or spend constraints on
+  retry, fallback, cache hits, or budget exhaustion.
+- Durable usage/idempotency/budget records are critical-path correctness state;
+  metrics exporters are best effort. Document dependency failure behavior.
+- Never spend on live providers, provision cloud resources, or deploy without
+  an explicit request covering that action.
+
+## Validation and handoff
+
+For now, validate OpenSpec, documentation links, and preservation of references.
+Once code exists, define runnable quality/test commands in `pyproject.toml` and
+README; use unit, API, adapter-contract, integration, fault, security, and load
+checks proportionate to the change. Do not report commands as passing unless
+they ran. Report changed files, checks performed, assumptions, and remaining
+work; distinguish measured results from goals.

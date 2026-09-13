@@ -1,0 +1,35 @@
+# Local credentials and configuration; keep sanitized examples trackable.
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+
+# Future Python/tool outputs.
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+htmlcov/
+*.egg-info/
+build/
+dist/
+
+# Local generated runtime/benchmark content, not approved versioned datasets.
+.local/
+artifacts/
+*.log
+.DS_Store
+
+# Terraform state and generated plans may contain secrets.
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+# Intentionally track .terraform.lock.hcl when infrastructure is introduced.

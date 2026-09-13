@@ -1,0 +1,31 @@
+schema: spec-driven
+
+context: |
+  This is the LLM Reliability Gateway repository, a greenfield Python backend
+  project derived from an informal portfolio-project handoff. There is no
+  application code, running service, benchmark evidence, or cloud deployment yet.
+  Target stack: Python 3.12, FastAPI, Pydantic, asyncio, PostgreSQL, Redis,
+  SQLAlchemy/Alembic, pytest, Ruff, mypy, OpenTelemetry, Docker, and Terraform.
+  AWS ECS Fargate is the proposed deployment target, not an existing environment.
+  Keep provider SDKs behind provider-neutral adapters. Prefer one service and
+  deterministic, configuration-driven policies before adaptive routing.
+  sources/ contains read-only synced references; never mutate its contents.
+  The original handoff is historical reference, not the authoritative contract.
+  Requirements under active changes describe planned behavior. Durable specs
+  should not be presented as implemented until the associated work is verified.
+  Metrics are targets until a reproducible benchmark supplies evidence.
+
+rules:
+  proposal:
+    - Distinguish greenfield additions from observed implementation.
+    - State non-goals and identify all capability specs affected.
+  specs:
+    - Use normative SHALL or MUST requirements with testable WHEN/THEN scenarios.
+    - Specify tenant isolation and failure behavior wherever shared state is used.
+    - Do not promise exactly-once provider execution or unknowable actual-cost bounds.
+  design:
+    - Record assumptions, tradeoffs, unresolved decisions, and dependency failure modes.
+    - Separate exact caching from optional semantic reuse.
+  tasks:
+    - Keep unimplemented tasks unchecked and organize them by gated milestones.
+    - Tie tasks to capability requirements and concrete validation evidence.
