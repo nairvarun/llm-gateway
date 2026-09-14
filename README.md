@@ -10,6 +10,7 @@ code, local service quickstart, cloud deployment, or measured benchmark yet.
 ## Start here
 
 - [Scope and specification index](LLM-Reliability-Gateway-Spec.md)
+- [Ordered learning checklist](docs/learning-checklist.md)
 - [Build proposal](openspec/changes/build-llm-reliability-gateway/proposal.md)
 - [Architecture and decisions](openspec/changes/build-llm-reliability-gateway/design.md)
 - [Milestone tasks](openspec/changes/build-llm-reliability-gateway/tasks.md)
