@@ -7,8 +7,11 @@ service for generation, structured extraction, reliability, spend accounting,
 and evaluation. It originated in the ChatGPT project “Gul Resume”; that is
 provenance, not an instruction to edit a resume in this repository.
 
-The repository is currently documentation-only. Do not describe planned APIs,
-tests, infrastructure, or performance targets as working or verified. The resume
+Milestone 1's offline foundation is implemented: mock generation/extraction,
+schema validation, PostgreSQL records, authentication, local containers, and tests.
+Read `docs/quickstart.md` and `docs/milestone-1-verification.md` for runnable checks
+and boundaries. Do not describe later APIs, controls, infrastructure, or performance
+targets as working or verified. The resume
 mentioned in the old instructions is not present; do not invent its contents.
 
 ## Read first and resolve conflicts
@@ -52,7 +55,7 @@ historical example or a benchmark target.
   For another change, substitute its resolved name. Validation checks artifact
   structure, not service correctness or owner approval.
 
-## Engineering constraints for future implementation
+## Engineering constraints
 
 - Prefer a single async FastAPI service with explicit domain boundaries. Provider
   SDK types and errors belong behind adapters, not in API/domain contracts.
@@ -76,9 +79,12 @@ historical example or a benchmark target.
 
 ## Validation and handoff
 
-For now, validate OpenSpec, documentation links, and preservation of references.
-Once code exists, define runnable quality/test commands in `pyproject.toml` and
-README; use unit, API, adapter-contract, integration, fault, security, and load
-checks proportionate to the change. Do not report commands as passing unless
+Run `uv run ruff format --check app migrations tests deploy`,
+`uv run ruff check app migrations tests deploy`, `uv run mypy`, and `uv run pytest`.
+The full suite requires PostgreSQL and fails loudly when it is absent. Integration
+tests create/drop only their own random schemas; do not point them at production.
+Use the quickstart smoke demo to verify the container. Also validate OpenSpec,
+documentation links, and preservation of references; use additional fault,
+security, and load checks proportionate to the change. Do not report commands as passing unless
 they ran. Report changed files, checks performed, assumptions, and remaining
 work; distinguish measured results from goals.

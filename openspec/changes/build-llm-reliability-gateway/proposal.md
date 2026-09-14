@@ -1,3 +1,9 @@
+## Implementation status
+
+Milestone 1's offline foundation is implemented and locally verified. See
+[the evidence report](../../../docs/milestone-1-verification.md) and `tasks.md`.
+Milestones 2–6 remain planned; this active change is not a completed baseline.
+
 ## Why
 
 Direct LLM-provider integrations expose applications to inconsistent contracts,
@@ -15,8 +21,8 @@ the informal handoff needs a testable contract before implementation begins.
   attempt-level usage attribution, and privacy-safe operational evidence.
 - Add versioned evaluation datasets, task-specific scores, promotion gates,
   reproducible local deployment, and a gated AWS staging deployment.
-- Treat all work as planned: this change contains no implemented behavior.
-  Use milestone gates rather than presenting the whole platform as an MVP.
+- Deliver through milestone gates rather than presenting the whole platform as
+  an MVP. Only the offline foundation is implemented at this point.
 
 ## Capabilities
 
@@ -39,7 +45,8 @@ the informal handoff needs a testable contract before implementation begins.
 
 ### Modified Capabilities
 
-None. There are no existing durable capability specs or application code.
+None. This was a greenfield proposal; there are no existing durable capability
+specs. Milestone 1 subsequently added application code under this change.
 
 ## Impact
 

@@ -1,0 +1,45 @@
+name: Foundation checks
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-foundation:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: gateway
+          POSTGRES_PASSWORD: local-development-only
+          POSTGRES_DB: gateway
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U gateway -d gateway"
+          --health-interval 2s --health-timeout 2s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.13"
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync --frozen
+      - run: uv run ruff format --check app migrations tests deploy
+      - run: uv run ruff check app migrations tests deploy
+      - run: uv run mypy
+      - run: uv run pytest
+      - name: Build and smoke-test the offline container
+        env:
+          GATEWAY_POSTGRES_PORT: "55433"
+          GATEWAY_DATABASE_URL: postgresql+asyncpg://gateway:local-development-only@127.0.0.1:55433/gateway
+        run: |
+          docker compose up --build -d --wait
+          uv run gateway seed-local
+          uv run python -m deploy.smoke
+          docker compose stop

@@ -1,9 +1,12 @@
 ## Context
 
-See [proposal.md](proposal.md) for motivation and capability scope. The repository
-has no application code or existing API/data migrations. The historical handoff
+See [proposal.md](proposal.md) for motivation and capability scope. At proposal
+creation the repository had no application code or API/data migrations. Milestone
+1 now supplies the offline foundation; see [its verification report](../../../docs/milestone-1-verification.md).
+The remaining design describes planned, unimplemented milestones. The historical handoff
 is preserved in [the reference snapshot](../../../docs/reference/original-handoff.md).
-The capability files under `specs/` are planned contracts, not observed behavior.
+The capability files under `specs/` describe the full planned contract; only the
+completed foundation tasks have implementation evidence.
 
 This design is required because durable spend/idempotency state, concurrent
 execution, provider failures, privacy, and deployment cross several boundaries.

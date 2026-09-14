@@ -1,0 +1,197 @@
+# Milestone 1 quickstart
+
+This runs the offline foundation: authenticated generation, locally validated
+extraction, a deterministic mock, and durable PostgreSQL evidence. No paid
+provider/AWS account is needed. Internet access is needed initially to download
+Python packages and container images; provider invocations themselves are offline.
+
+## Prerequisites
+
+- `uv` and Python 3.12 (uv can install the interpreter).
+- Docker with Compose, or an existing Lima instance with nerdctl Compose.
+- Free loopback ports 8000 (API), 55432 (PostgreSQL), and 56379 (optional Redis).
+
+The database password in Compose is explicitly local-development-only. Ports
+bind to loopback; do not expose this environment to a network or treat it as
+production security. Synthetic tenant credentials are randomly generated and
+stored privately outside git; no real provider keys belong here.
+
+## Start with Docker Compose
+
+From the repository root:
+
+```sh
+uv python install 3.12
+uv sync --frozen
+docker compose up --build -d --wait
+uv run gateway seed-local
+uv run python -m deploy.smoke
+```
+
+Container startup waits for PostgreSQL, applies migrations, then starts the API.
+The seed command creates a synthetic tenant, free mock configuration versions,
+the `demo-count` schema, and a mode-0600 `.local/client-key`. A repeat invocation
+verifies the existing key without replacing it or printing it. Readiness is 503
+until migrations and mock configuration exist; liveness does not probe storage.
+
+The smoke demo reports successful generate/extract request IDs without printing
+credentials. Open [API documentation](http://127.0.0.1:8000/docs) for published
+types/defaults and use `X-API-Key` authentication. Keep the local key private.
+
+## Lima alternative
+
+If a nerdctl-enabled Lima instance already exists, replace Docker commands with:
+
+```sh
+limactl start default --tty=false
+limactl shell default nerdctl compose up --build -d
+uv run gateway wait-database --timeout 30
+uv run gateway seed-local
+uv run python -m deploy.smoke
+```
+
+Lima forwards loopback ports to the host. nerdctl may ignore Compose dependency
+conditions; the gateway's own bounded startup wait handles database ordering.
+Use the applicable instance name rather than creating an unrelated VM. On this
+machine the container image and smoke demo were verified through existing Lima.
+
+To use another PostgreSQL port, set both Compose's guest environment and the
+host client's connection URL, for example:
+
+```sh
+limactl shell default env GATEWAY_POSTGRES_PORT=55433 nerdctl compose up --build -d
+export GATEWAY_DATABASE_URL='postgresql+asyncpg://gateway:local-development-only@127.0.0.1:55433/gateway'
+uv run gateway wait-database --timeout 30
+uv run gateway seed-local --key-file .local/container-key
+GATEWAY_SMOKE_KEY_FILE=.local/container-key uv run python -m deploy.smoke
+```
+
+Do not reuse a private key file from a different/cleared database: seed refuses
+to overwrite an existing invalid/revoked key. Choose a new file or restore the
+matching local database. Docker supports the same port environment variables on
+the host. `GATEWAY_HTTP_PORT`/`GATEWAY_SMOKE_URL` configure the API port/client URL;
+`GATEWAY_REDIS_PORT` controls the optional Redis host port.
+
+## Run the API directly on the host
+
+Start just the local dependencies, then migrate/seed before starting Uvicorn:
+
+```sh
+docker compose up -d postgres redis
+uv run gateway wait-database --timeout 30
+uv run alembic upgrade head
+uv run gateway seed-local
+uv run uvicorn app.main:create_app --factory --host 127.0.0.1 --port 8000 --no-access-log
+```
+
+For Lima, substitute `limactl shell default nerdctl compose up -d postgres redis`.
+Avoid starting host and container gateways on the same API port simultaneously.
+
+## API examples and evidence
+
+`POST /v1/generate` accepts `{"input":"synthetic demo"}` and returns normalized
+text/metadata. `POST /v1/extract` accepts:
+
+```json
+{
+  "input": "{\"count\": 2}",
+  "schema_name": "demo-count",
+  "schema_version": "v1"
+}
+```
+
+Alternatively use `json_schema` with an inline object instead of name/version.
+The mock echoes JSON input for extraction; it does not infer fields from prose.
+Validation failures return typed errors and never successful unvalidated JSON.
+USD values use decimal strings. Mock cost is zero and token counts are synthetic
+(one token per four Unicode code points), not real model or invoice measurements.
+
+Every ingress has a server-generated `X-Request-ID` matching `request_id`. Inspect
+durable metadata using an ID from the smoke demo:
+
+```sh
+uv run gateway inspect-request REQUEST_ID
+```
+
+Use `--key-file .local/container-key` when following the alternate-port example.
+Tenant credentials can inspect only their tenant's records. A trusted local
+operator bootstrap and revocation path is available:
+
+```sh
+uv run gateway seed-local --operator --key-file .local/operator-key
+uv run gateway revoke-key CREDENTIAL_ID --key-file .local/operator-key
+```
+
+Operator bootstrap is a local development command, not a public registration API.
+Request evidence includes status/identity/policy/error metadata, never raw input
+or output. Keys are verification hashes in PostgreSQL. Input hashes use a keyed
+HMAC; set a private `GATEWAY_INPUT_HASH_KEY` for stable hashes across restarts,
+otherwise an ephemeral key is generated for each process.
+
+## Tests and quality checks
+
+With PostgreSQL running:
+
+```sh
+uv run ruff format --check app migrations tests deploy
+uv run ruff check app migrations tests deploy
+uv run mypy
+uv run pytest
+openspec validate build-llm-reliability-gateway --strict --no-interactive
+```
+
+The full suite fails visibly when PostgreSQL is unavailable; required integration
+tests are not silently skipped. `TEST_DATABASE_URL` overrides its connection.
+Each integration test migrates a newly created random schema and deletes only
+that schema; it never truncates/drops the developer's public tables. The database
+user therefore needs local schema-creation privileges.
+
+For pure unit/API-double checks without PostgreSQL:
+
+```sh
+uv run pytest -m 'not integration'
+```
+
+This smaller suite is useful during development but does not replace PostgreSQL
+verification. GitHub Actions runs quality/full tests, builds the container, and
+smoke-tests a separate Compose database. The workflow has been added; no remote
+Actions run is claimed by local verification.
+
+## Fault demo and stopping
+
+`GATEWAY_MOCK_SCENARIO` is operator-controlled, not a client metadata field.
+Supported faults include `timeout`, `connection`, `rate_limit`, `server`,
+`credential`, `invalid_request`, `malformed`, `schema_invalid`, `refusal`,
+`truncation`, and `missing_usage`. Set it when starting/recreating the gateway.
+Milestone 1 makes one attempt and returns a typed failure; retries/fallback belong
+to milestone 3. The smoke script expects `success`, so use the API/tests to inspect
+faults and restore the default afterward.
+
+Stop containers while retaining local data:
+
+```sh
+docker compose stop
+```
+
+For Lima: `limactl shell default nerdctl compose stop`. Do not remove the database
+volume unless you intentionally want to discard local tenants/evidence; its loss
+also invalidates private key files. Data-destructive automatic Alembic downgrade
+is deliberately disabled; future schema changes need forward migrations.
+
+## Current boundary
+
+No live adapters/ranking, automatic retries/fallback, shared rate/concurrency
+controls/circuits, encrypted idempotency replay, cache, spend reservations,
+evaluation runner, metrics/tracing pipeline, or cloud deployment is implemented.
+Cache modes other than bypass and supplied idempotency keys return
+`INVALID_REQUEST` rather than silently pretending to enforce them. The schema
+includes their future wire fields, but execution remains gated to later milestones.
+An individual mock call has a timeout; full deadline/cancellation/recovery controls
+and spend enforcement are not yet a production guarantee. Redis is optional in
+this milestone; its outage degrades readiness metadata without blocking mock work.
+
+Raw prompts/outputs are not stored or logged by the application. Usage is linked
+to request/attempt/pricing records before success is returned. A failed terminal
+write leaves dispatch intent unresolved and returns a non-retryable error;
+uncertain-state recovery is later work. This is an offline foundation, not a
+production-ready gateway or a benchmark achievement.

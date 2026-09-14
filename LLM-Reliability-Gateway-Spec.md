@@ -1,8 +1,9 @@
 # LLM Reliability Gateway
 
-Status: proposed build contract; documentation-only repository.
-This is the entry point to the refined specification, not evidence of a running
-service. It supersedes the informal handoff preserved unchanged in
+Status: full baseline proposed; milestone 1 offline foundation implemented.
+This is the entry point to the refined specification. See the
+[quickstart](docs/quickstart.md) and [foundation evidence](docs/milestone-1-verification.md)
+for delivered behavior; later capabilities are not implemented. It supersedes the informal handoff preserved unchanged in
 [docs/reference/original-handoff.md](docs/reference/original-handoff.md).
 
 ## Objective
@@ -29,7 +30,7 @@ or unsupported resume claims.
   staging with security, deployment, and rollback evidence.
 
 These capabilities form the full baseline program, not the first milestone.
-The first delivery is an offline mock-backed generation/extraction slice.
+The delivered first milestone is an offline mock-backed generation/extraction slice.
 See the [roadmap](docs/roadmap.md) for incremental gates.
 
 ## Normative capability specifications
@@ -60,7 +61,9 @@ or archive the initial program merely because its planning files validate.
 - `GET /v1/metrics/summary`: authorized bounded-window operational summary.
 - `GET /health/live` and `GET /health/ready`: liveness and sanitized readiness.
 
-OpenAPI will define exact wire types/defaults in milestone 1. Capability specs
+The foundation publishes wire types/defaults through OpenAPI at `/openapi.json`.
+Unavailable cache/idempotency execution is rejected explicitly; live routing and
+other later capabilities remain gated. Capability specs
 are the behavior contract; the [design](openspec/changes/build-llm-reliability-gateway/design.md)
 records proposed stack, defaults, state ownership, and control paths. Configuration
 changes/invalidation initially use a validated authorized operator CLI; an
@@ -94,7 +97,7 @@ framework, fine-tuning, or universal provider/modality support is planned.
 
 ## Delivery and evidence
 
-Use the [unchecked milestone tasks](openspec/changes/build-llm-reliability-gateway/tasks.md)
+Use the [milestone tasks](openspec/changes/build-llm-reliability-gateway/tasks.md)
 and [measurement plan](docs/roadmap.md). Release evidence must trace implemented
 behavior to capability scenarios, including failure cases, security boundaries,
 and an exercised staging rollback. Numeric performance/quality goals are targets

@@ -4,15 +4,15 @@ Coverage: `gateway-api`, mock contract in `provider-routing`, critical recording
 in `usage-budgets`, and local/security foundations in `deployment-security`.
 Keep live execution disabled until reliability and budget gates are complete.
 
-- [ ] 1.1 Create the Python package/dependency lock and Ruff/mypy/pytest configuration; verify installation and documented quality commands from a clean environment.
-- [ ] 1.2 Add provider-neutral inputs/results/errors and the scripted mock adapter; verify contract tests cover success, refusal, truncation, malformed output, missing usage, and all classified faults.
-- [ ] 1.3 Add PostgreSQL migrations for tenant credentials, immutable versions, requests, attempts, and usage/dispatch intent; verify clean migration and unique-event constraints in integration tests.
-- [ ] 1.4 Implement hashed client-key authentication, tenant/application identity, revocation, and operator permissions; verify invalid/revoked keys and cross-tenant access are denied.
-- [ ] 1.5 Publish generate/extract request/response/error OpenAPI schemas with configured bounds and enums; verify invalid fields, size limits, conflicting schema inputs, and unsupported modes cause no mock invocation.
-- [ ] 1.6 Implement bounded local JSON Schema validation and named schema versions; verify remote references, cycles, unsupported keywords, invalid/truncated/refused results never return extraction success.
-- [ ] 1.7 Implement the mock-backed generation/extraction path with durable request/attempt/terminal records; verify successful and failed calls are correlated and database failure prevents dispatch.
-- [ ] 1.8 Add liveness/readiness and containerized local dependencies; verify liveness ignores dependency outages and readiness reports critical versus optional failures without secrets.
-- [ ] 1.9 Add initial offline CI and an honest foundation quickstart; verify a clean credential-free checkout runs generation/extraction and passes format/lint/type/unit/API/contract checks.
+- [x] 1.1 Create the Python package/dependency lock and Ruff/mypy/pytest configuration; verify installation and documented quality commands from a clean environment.
+- [x] 1.2 Add provider-neutral inputs/results/errors and the scripted mock adapter; verify contract tests cover success, refusal, truncation, malformed output, missing usage, and all classified faults.
+- [x] 1.3 Add PostgreSQL migrations for tenant credentials, immutable versions, requests, attempts, and usage/dispatch intent; verify clean migration and unique-event constraints in integration tests.
+- [x] 1.4 Implement hashed client-key authentication, tenant/application identity, revocation, and operator permissions; verify invalid/revoked keys and cross-tenant access are denied.
+- [x] 1.5 Publish generate/extract request/response/error OpenAPI schemas with configured bounds and enums; verify invalid fields, size limits, conflicting schema inputs, and unsupported modes cause no mock invocation.
+- [x] 1.6 Implement bounded local JSON Schema validation and named schema versions; verify remote references, cycles, unsupported keywords, invalid/truncated/refused results never return extraction success.
+- [x] 1.7 Implement the mock-backed generation/extraction path with durable request/attempt/terminal records; verify successful and failed calls are correlated and database failure prevents dispatch.
+- [x] 1.8 Add liveness/readiness and containerized local dependencies; verify liveness ignores dependency outages and readiness reports critical versus optional failures without secrets.
+- [x] 1.9 Add initial offline CI and an honest foundation quickstart; verify a clean credential-free checkout runs generation/extraction and passes format/lint/type/unit/API/contract checks.
 
 ## 2. Multi-provider routing — offline adapter evidence
 
