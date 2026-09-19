@@ -1,0 +1,10 @@
+{
+  "id": "msg_synthetic_success",
+  "type": "message",
+  "role": "assistant",
+  "model": "claude-haiku-4-5-20251001",
+  "content": [{"type": "text", "text": "Synthetic answer."}],
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "usage": {"input_tokens": 7, "output_tokens": 4}
+}

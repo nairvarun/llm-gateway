@@ -50,6 +50,14 @@ class ConfigurationVersion(Base):
     payload: Mapped[dict[str, Any]] = mapped_column(JSONB)
 
 
+class RoutingControl(Base):
+    __tablename__ = "routing_control"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    active_policy_id: Mapped[UUID] = mapped_column(ForeignKey("configuration_versions.id"))
+    disabled_providers: Mapped[list[str]] = mapped_column(JSONB)
+    revision: Mapped[int] = mapped_column(default=1)
+
+
 class SchemaVersion(Base):
     __tablename__ = "schema_versions"
     __table_args__ = (UniqueConstraint("tenant_id", "name", "version"),)
@@ -75,6 +83,7 @@ class RequestRecord(Base):
     schema_hash: Mapped[str | None] = mapped_column(String(64))
     policy_id: Mapped[UUID] = mapped_column(ForeignKey("configuration_versions.id"))
     policy_version: Mapped[str] = mapped_column(String(100))
+    routing_evidence: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     error_code: Mapped[str | None] = mapped_column(String(50))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

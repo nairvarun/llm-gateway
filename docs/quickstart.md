@@ -1,7 +1,7 @@
-# Milestone 1 quickstart
+# Offline quickstart (milestones 1–2)
 
-This runs the offline foundation: authenticated generation, locally validated
-extraction, a deterministic mock, and durable PostgreSQL evidence. No paid
+This runs the offline service: authenticated generation, locally validated
+extraction, a deterministic mock, versioned routing, and durable PostgreSQL evidence. No paid
 provider/AWS account is needed. Internet access is needed initially to download
 Python packages and container images; provider invocations themselves are offline.
 
@@ -29,9 +29,10 @@ uv run python -m deploy.smoke
 ```
 
 Container startup waits for PostgreSQL, applies migrations, then starts the API.
-The seed command creates a synthetic tenant, free mock configuration versions,
+The seed command creates a synthetic tenant, immutable free mock configuration versions,
 the `demo-count` schema, and a mode-0600 `.local/client-key`. A repeat invocation
-verifies the existing key without replacing it or printing it. Readiness is 503
+verifies the existing key without replacing it or printing it, and adds missing
+milestone 2 mock registry rows when upgrading an older local database. Readiness is 503
 until migrations and mock configuration exist; liveness does not probe storage.
 
 The smoke demo reports successful generate/extract request IDs without printing
@@ -103,8 +104,12 @@ text/metadata. `POST /v1/extract` accepts:
 Alternatively use `json_schema` with an inline object instead of name/version.
 The mock echoes JSON input for extraction; it does not infer fields from prose.
 Validation failures return typed errors and never successful unvalidated JSON.
-USD values use decimal strings. Mock cost is zero and token counts are synthetic
+USD values use decimal strings. Default mock cost is zero and token counts are synthetic
 (one token per four Unicode code points), not real model or invoice measurements.
+The response's `routing` object shows the pinned policy/model/pricing versions,
+ranked candidates, score estimates, and non-sensitive exclusion reasons. A
+`NO_ELIGIBLE_MODEL` response is also stored under its request ID without invoking
+a provider.
 
 Every ingress has a server-generated `X-Request-ID` matching `request_id`. Inspect
 durable metadata using an ID from the smoke demo:
@@ -123,7 +128,40 @@ uv run gateway revoke-key CREDENTIAL_ID --key-file .local/operator-key
 ```
 
 Operator bootstrap is a local development command, not a public registration API.
-Request evidence includes status/identity/policy/error metadata, never raw input
+The operator can publish validated immutable policy/model/pricing JSON, activate
+or roll back a policy, and disable or re-enable a registered provider:
+
+For a local policy experiment, put this JSON in `policy.json` and choose a new
+version string; it reuses the immutable seeded mock model and pricing:
+
+```json
+{
+  "candidates": [{"name": "mock-text-v1", "version": "v2", "order": 0}],
+  "weights": {"quality": "1", "affordability": "1", "latency": "1", "health": "1"},
+  "affordability_reference_usd": "1",
+  "minimum_deadline_ms": 0,
+  "attempt_limit": 1,
+  "fallback_enabled": false
+}
+```
+
+```sh
+uv run gateway publish-config policy mock-policy v3 policy.json --key-file .local/operator-key
+uv run gateway activate-policy mock-policy v3 --key-file .local/operator-key
+uv run gateway disable-provider mock --key-file .local/operator-key
+uv run gateway enable-provider mock --key-file .local/operator-key
+uv run gateway rollback-policy mock-policy v2 --key-file .local/operator-key
+```
+
+Publishing does not activate a version. Activation checks referenced model and
+pricing rows in the same transaction; each mutation is audited. Configuration
+is read from PostgreSQL for each request and provider enablement is rechecked
+before mock dispatch (no application cache; maximum refresh target five seconds).
+A disabled mock yields `NO_ELIGIBLE_MODEL` without a new mock call. See the
+[routing verification](milestone-2-verification.md) and
+[provider matrix](provider-selection.md) for payload shape and limits.
+
+Request evidence includes status/identity/policy/routing/error metadata, never raw input
 or output. Keys are verification hashes in PostgreSQL. Input hashes use a keyed
 HMAC; set a private `GATEWAY_INPUT_HASH_KEY` for stable hashes across restarts,
 otherwise an ephemeral key is generated for each process.
@@ -163,7 +201,7 @@ Actions run is claimed by local verification.
 Supported faults include `timeout`, `connection`, `rate_limit`, `server`,
 `credential`, `invalid_request`, `malformed`, `schema_invalid`, `refusal`,
 `truncation`, and `missing_usage`. Set it when starting/recreating the gateway.
-Milestone 1 makes one attempt and returns a typed failure; retries/fallback belong
+The current service makes one attempt and returns a typed failure; retries/fallback belong
 to milestone 3. The smoke script expects `success`, so use the API/tests to inspect
 faults and restore the default afterward.
 
@@ -180,18 +218,21 @@ is deliberately disabled; future schema changes need forward migrations.
 
 ## Current boundary
 
-No live adapters/ranking, automatic retries/fallback, shared rate/concurrency
+OpenAI and Anthropic adapters and deterministic ranking have offline contract
+tests, but the HTTP runtime cannot dispatch them. Their conservative token
+bounds remain unavailable, so strict-budget selection excludes them. There are
+no automatic retries/fallback, shared rate/concurrency
 controls/circuits, encrypted idempotency replay, cache, spend reservations,
-evaluation runner, metrics/tracing pipeline, or cloud deployment is implemented.
+evaluation runner, metrics/tracing pipeline, or cloud deployment.
 Cache modes other than bypass and supplied idempotency keys return
 `INVALID_REQUEST` rather than silently pretending to enforce them. The schema
 includes their future wire fields, but execution remains gated to later milestones.
 An individual mock call has a timeout; full deadline/cancellation/recovery controls
-and spend enforcement are not yet a production guarantee. Redis is optional in
-this milestone; its outage degrades readiness metadata without blocking mock work.
+and spend enforcement are not yet a production guarantee. Redis remains optional;
+its outage degrades readiness metadata without blocking mock work.
 
 Raw prompts/outputs are not stored or logged by the application. Usage is linked
 to request/attempt/pricing records before success is returned. A failed terminal
 write leaves dispatch intent unresolved and returns a non-retryable error;
-uncertain-state recovery is later work. This is an offline foundation, not a
+uncertain-state recovery is later work. This is an offline foundation/routing demo, not a
 production-ready gateway or a benchmark achievement.

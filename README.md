@@ -4,10 +4,11 @@ A Python gateway project between applications and language-model providers,
 focused on bounded failures, validated output, explainable routing, spend
 accounting, and reproducible evaluation.
 
-Status: milestone 1 offline foundation implemented. Authenticated mock generation,
-schema-validated extraction, PostgreSQL evidence, local containers, and tests are
-available. The full gateway remains planned; there are no live adapters, cloud
-deployment, or measured benchmark results yet.
+Status: milestones 1–2 implemented offline. Authenticated mock generation,
+schema-validated extraction, PostgreSQL evidence, two fixture-tested live-provider
+adapters, deterministic versioned routing, and audited operator controls are
+available. The HTTP runtime remains mock-only. There are no paid provider calls,
+cloud deployment, or measured benchmark results.
 
 ## Run the foundation
 
@@ -31,6 +32,7 @@ requires internet access. Use the Lima alternative if Docker is not installed.
 
 - [Scope and specification index](LLM-Reliability-Gateway-Spec.md)
 - [Foundation verification](docs/milestone-1-verification.md)
+- [Routing verification](docs/milestone-2-verification.md)
 - [Ordered learning checklist](docs/learning-checklist.md)
 - [Build proposal](openspec/changes/build-llm-reliability-gateway/proposal.md)
 - [Architecture and decisions](openspec/changes/build-llm-reliability-gateway/design.md)
@@ -46,9 +48,9 @@ AGENTS.md                       Agent workflow and safety constraints
 LLM-Reliability-Gateway-Spec.md  Scope and links to normative requirements
 README.md                       Entry point and current state
 pyproject.toml / uv.lock         Python package, checks, locked dependencies
-app/                            API/domain/mock/security/PostgreSQL implementation
+app/                            API/domain/adapters/routing/security/PostgreSQL implementation
 tests/                          Unit/API/adapter and real-PostgreSQL checks
-migrations/                     Frozen forward-only foundation migration
+migrations/                     Forward-only foundation and routing migrations
 deploy/                         Bounded startup and offline smoke helpers
 Dockerfile / compose.yaml        Local service and PostgreSQL/optional Redis
 .github/workflows/ci.yml         Offline foundation checks and container smoke
@@ -65,6 +67,8 @@ openspec/
 docs/
   quickstart.md                 Runnable local setup/examples/checks
   milestone-1-verification.md    Verification evidence and implementation boundary
+  milestone-2-verification.md    Offline adapter/routing evidence and boundaries
+  provider-selection.md          Source-checked models, prices, and fixture provenance
   roadmap.md                    Delivery gates and benchmark methodology
   handoff-review.md             Provenance and reconciliation notes
   reference/original-handoff.md Unchanged historical specification
@@ -72,8 +76,8 @@ sources/                        Read-only synced references
 ```
 
 Dataset and infrastructure directories will be created when their milestones are
-implemented. Live-provider code, cache/reliability controls, evaluation, and cloud
-resources have not been scaffolded merely to suggest they exist.
+implemented. Live-provider adapters exist but are not connected for paid execution;
+cache/reliability controls, evaluation, and cloud resources remain later work.
 
 ## Planning workflow
 

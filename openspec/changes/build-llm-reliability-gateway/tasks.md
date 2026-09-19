@@ -18,13 +18,13 @@ Keep live execution disabled until reliability and budget gates are complete.
 
 Coverage: `provider-routing` and pricing provenance in `usage-budgets`.
 
-- [ ] 2.1 Select two provider/model IDs and pinned SDKs against required capabilities; verify a recorded capability/pricing/token-bound matrix and sanitized fixture provenance exist, without paid calls by default.
-- [ ] 2.2 Implement the first live adapter with SDK retries disabled or explicitly bounded; verify the common contract suite against sanitized fixtures covers normalization and error/usage classification.
-- [ ] 2.3 Implement the second live adapter with the same boundaries; verify it passes the identical contract suite without credentials/network calls.
-- [ ] 2.4 Implement immutable registry/policy/pricing resolution and conservative decimal token/cost estimates; verify pinned snapshots, unavailable-bound rejection, and estimate arithmetic tests.
-- [ ] 2.5 Implement filtering, weighted deterministic ranking, and stable tie-breaking; verify capability/context/tenant/health/deadline/spend exclusions and property tests for identical-snapshot ordering.
-- [ ] 2.6 Implement authorized policy publish/activate/rollback/provider-disable CLI using validated audited mutations; verify unauthorized writes fail, in-flight snapshots persist, and disablement takes effect within the refresh bound.
-- [ ] 2.7 Connect routing evidence to API responses/durable records; verify each mock/fixture call is explainable from one request ID and no provider wire types leak into OpenAPI.
+- [x] 2.1 Select two provider/model IDs and pinned SDKs against required capabilities; verify a recorded capability/pricing/token-bound matrix and sanitized fixture provenance exist, without paid calls by default.
+- [x] 2.2 Implement the first live adapter with SDK retries disabled or explicitly bounded; verify the common contract suite against sanitized fixtures covers normalization and error/usage classification.
+- [x] 2.3 Implement the second live adapter with the same boundaries; verify it passes the identical contract suite without credentials/network calls.
+- [x] 2.4 Implement immutable registry/policy/pricing resolution and conservative decimal token/cost estimates; verify pinned snapshots, unavailable-bound rejection, and estimate arithmetic tests.
+- [x] 2.5 Implement filtering, weighted deterministic ranking, and stable tie-breaking; verify capability/context/tenant/health/deadline/spend exclusions and property tests for identical-snapshot ordering.
+- [x] 2.6 Implement authorized policy publish/activate/rollback/provider-disable CLI using validated audited mutations; verify unauthorized writes fail, in-flight snapshots persist, and disablement takes effect within the refresh bound.
+- [x] 2.7 Connect routing evidence to API responses/durable records; verify each mock/fixture call is explainable from one request ID and no provider wire types leak into OpenAPI.
 
 ## 3. Reliability — bounded fault behavior
 

@@ -1,10 +1,14 @@
+import json
 from collections.abc import AsyncIterator
+from dataclasses import replace
+from decimal import Decimal
 from uuid import UUID
 
 import httpx
 import pytest
 
 from app.config import Settings
+from app.domain.routing import PricingPayload
 from app.main import create_app
 from app.persistence.bootstrap import DEMO_SCHEMA
 from app.providers.mock import MockProvider, MockStep
@@ -47,6 +51,27 @@ async def test_generation_contract_and_derived_identity(
     assert record.tenant_id == memory.principal.tenant_id
     assert record.status == "completed"
     assert body["usage"]["complete"] is True
+
+
+async def test_nonzero_mock_pricing_uses_decimal_observed_estimate(memory: MemoryStore) -> None:
+    model = memory.routing.models[0]
+    priced = replace(
+        model,
+        pricing=PricingPayload(input_per_million=Decimal("1"), output_per_million=Decimal("2")),
+    )
+    memory.routing = replace(memory.routing, models=(priced,))
+    app = create_app(Settings(), store=memory, provider=MockProvider())
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app),
+        base_url="http://test",
+        headers={"X-API-Key": memory.key},
+    ) as client:
+        response = await client.post("/v1/generate", json={"input": "abc"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["usage"]["input_tokens"] == 1
+    assert body["usage"]["output_tokens"] == 5
+    assert body["estimated_cost_usd"] == "0.0000110000"
 
 
 @pytest.mark.parametrize("headers", [{"X-API-Key": "wrong"}, {"X-API-Key": ""}])
@@ -216,3 +241,7 @@ def test_openapi_contract(memory: MemoryStore) -> None:
     request = schema["components"]["schemas"]["GenerateRequest"]
     assert request["additionalProperties"] is False
     assert request["properties"]["latency_budget_ms"]["maximum"] == 120_000
+    assert "routing" in schema["components"]["schemas"]["GenerateResponse"]["properties"]
+    serialized = json.dumps(schema).lower()
+    assert "openai.types" not in serialized
+    assert "anthropic.types" not in serialized

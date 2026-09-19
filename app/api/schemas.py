@@ -64,6 +64,7 @@ class ExecutionResponse(BaseModel):
     idempotency_replayed: bool = False
     fallback_used: bool = False
     policy_version: str
+    routing: dict[str, JsonValue] | None = None
 
 
 class GenerateResponse(ExecutionResponse):

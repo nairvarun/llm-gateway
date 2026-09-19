@@ -16,7 +16,7 @@ from app import __version__
 from app.config import load_settings
 from app.domain.errors import GatewayError
 from app.domain.models import Principal, StateUnavailable
-from app.persistence.bootstrap import bootstrap_local
+from app.persistence.bootstrap import bootstrap_local, ensure_local_configuration
 from app.persistence.database import database_engine
 from app.persistence.store import PostgresStore
 from app.security.auth import hash_api_key
@@ -69,6 +69,7 @@ async def run(args: argparse.Namespace) -> None:
                 raise ValueError("Local bootstrap refuses a non-local database host")
             if await asyncio.to_thread(key_file.exists):
                 principal = await authenticate_file(store, key_file)
+                await ensure_local_configuration(store)
                 print(f"Existing local credential verified for tenant {principal.tenant_id}.")
                 return
             if "sources" in (await asyncio.to_thread(key_file.resolve)).parts:
@@ -88,6 +89,30 @@ async def run(args: argparse.Namespace) -> None:
             principal = await authenticate_file(store, key_file)
             await store.revoke(principal, UUID(args.credential_id))
             print("Credential revocation recorded.")
+        elif args.command == "publish-config":
+            principal = await authenticate_file(store, key_file)
+            payload_file = Path(args.payload_file)
+            if (await asyncio.to_thread(payload_file.stat)).st_size > 65_536:
+                raise ValueError("Configuration payload exceeds 64 KiB")
+            payload = json.loads(await asyncio.to_thread(payload_file.read_text))
+            if not isinstance(payload, dict):
+                raise ValueError("Configuration payload must be a JSON object")
+            identity = await store.publish_configuration(
+                principal, args.kind, args.name, args.version, payload
+            )
+            print(f"Validated immutable {args.kind} version published: {identity}.")
+        elif args.command in {"activate-policy", "rollback-policy"}:
+            principal = await authenticate_file(store, key_file)
+            await store.activate_policy(
+                principal, args.name, args.version, rollback=args.command == "rollback-policy"
+            )
+            print(f"Policy {args.name}@{args.version} activated; audit recorded.")
+        elif args.command in {"disable-provider", "enable-provider"}:
+            principal = await authenticate_file(store, key_file)
+            await store.set_provider_disabled(
+                principal, args.provider, args.command == "disable-provider"
+            )
+            print(f"Provider {args.provider} control updated; audit recorded.")
     finally:
         await engine.dispose()
 
@@ -113,6 +138,21 @@ def main() -> None:
     revoke = commands.add_parser("revoke-key", help="Revoke a key using an operator credential")
     revoke.add_argument("credential_id")
     revoke.add_argument("--key-file", default=".local/operator-key")
+    publish = commands.add_parser("publish-config", help="Publish an immutable routing version")
+    publish.add_argument("kind", choices=["policy", "model", "pricing"])
+    publish.add_argument("name")
+    publish.add_argument("version")
+    publish.add_argument("payload_file")
+    publish.add_argument("--key-file", default=".local/operator-key")
+    for action in ("activate-policy", "rollback-policy"):
+        command = commands.add_parser(action, help="Activate an audited policy version")
+        command.add_argument("name")
+        command.add_argument("version")
+        command.add_argument("--key-file", default=".local/operator-key")
+    for action in ("disable-provider", "enable-provider"):
+        command = commands.add_parser(action, help="Change audited provider availability")
+        command.add_argument("provider")
+        command.add_argument("--key-file", default=".local/operator-key")
     args = parser.parse_args()
     try:
         asyncio.run(run(args))

@@ -1,11 +1,14 @@
 from dataclasses import dataclass
 from decimal import Decimal
 from enum import StrEnum
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 from uuid import UUID
 
 type JSONValue = None | bool | int | float | str | list[JSONValue] | dict[str, JSONValue]
 type JSONSchema = dict[str, JSONValue]
+
+if TYPE_CHECKING:
+    from app.domain.routing import RegistrySnapshot
 
 
 class FinishReason(StrEnum):
@@ -90,6 +93,9 @@ class ExecutionSnapshot:
     pricing_version: str
     input_price: Decimal
     output_price: Decimal
+    provider: str = "mock"
+    model: str = "mock-text-v1"
+    routing_evidence: dict[str, JSONValue] | None = None
 
 
 @dataclass(frozen=True)
@@ -106,6 +112,7 @@ class RequestEvidence:
     status: str
     policy_version: str
     error_code: str | None
+    routing_evidence: dict[str, JSONValue] | None = None
 
 
 class Store(Protocol):
@@ -114,6 +121,10 @@ class Store(Protocol):
     async def ready(self) -> bool: ...
 
     async def snapshot(self) -> ExecutionSnapshot: ...
+
+    async def registry(self) -> "RegistrySnapshot": ...
+
+    async def provider_enabled(self, provider: str) -> bool: ...
 
     async def schema(self, principal: Principal, name: str, version: str) -> JSONSchema | None: ...
 
@@ -126,6 +137,18 @@ class Store(Protocol):
         schema_hash: str | None,
         snapshot: ExecutionSnapshot,
     ) -> Dispatch: ...
+
+    async def reject_routing(
+        self,
+        principal: Principal,
+        request_id: UUID,
+        endpoint: str,
+        input_hash: str,
+        schema_hash: str | None,
+        policy_id: UUID,
+        policy_version: str,
+        routing_evidence: dict[str, JSONValue],
+    ) -> None: ...
 
     async def finish(
         self,

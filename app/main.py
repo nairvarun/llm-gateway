@@ -65,8 +65,9 @@ def create_app(
         version="0.1.0",
         lifespan=lifespan,
         description=(
-            "Milestone 1: single-attempt offline mock generation/extraction. "
-            "No live providers, cache, keyed replay, or evaluation execution yet."
+            "Milestones 1–2: single-attempt offline mock execution with versioned routing "
+            "evidence. Live adapters are fixture-tested but cannot dispatch through this API; "
+            "retries, budgets, cache, keyed replay, and evaluation execution remain unavailable."
         ),
     )
     application.add_middleware(RequestBoundary, limit=settings.body_limit_bytes)

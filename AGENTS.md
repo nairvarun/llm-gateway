@@ -7,10 +7,12 @@ service for generation, structured extraction, reliability, spend accounting,
 and evaluation. It originated in the ChatGPT project “Gul Resume”; that is
 provenance, not an instruction to edit a resume in this repository.
 
-Milestone 1's offline foundation is implemented: mock generation/extraction,
-schema validation, PostgreSQL records, authentication, local containers, and tests.
-Read `docs/quickstart.md` and `docs/milestone-1-verification.md` for runnable checks
-and boundaries. Do not describe later APIs, controls, infrastructure, or performance
+Milestones 1–2 are implemented offline: mock generation/extraction, schema
+validation, PostgreSQL records, authentication, fixture-tested OpenAI/Anthropic
+adapters, versioned routing, audited operator controls, and local containers.
+Read `docs/quickstart.md` and `docs/milestone-2-verification.md` for runnable checks
+and boundaries. Live adapter dispatch remains disabled until reliability/budget
+gates are complete; do not describe later controls, infrastructure, or performance
 targets as working or verified. The resume
 mentioned in the old instructions is not present; do not invent its contents.
 

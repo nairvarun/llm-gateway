@@ -3,6 +3,7 @@ import hashlib
 import hmac
 from decimal import Decimal
 from time import monotonic
+from typing import cast
 from uuid import UUID
 
 from app.api.schema_validation import validate_output, validate_schema
@@ -16,6 +17,7 @@ from app.api.schemas import (
 from app.config import Settings
 from app.domain.errors import GatewayError
 from app.domain.models import (
+    ExecutionSnapshot,
     FailureKind,
     FinishReason,
     JSONSchema,
@@ -28,6 +30,7 @@ from app.domain.models import (
     Store,
     TokenUsage,
 )
+from app.domain.routing import RoutingInput, maximum_cost, rank_candidates, sanitized_evidence
 
 
 class GatewayService:
@@ -82,29 +85,91 @@ class GatewayService:
             )
         elif request.task_type == "extraction":
             raise GatewayError("INVALID_REQUEST", "Use /v1/extract for structured extraction.", 422)
-        snapshot = await self.store.snapshot()
         input_hash = hmac.new(
             self.settings.input_hash_key.get_secret_value().encode(),
             request.input.encode(),
             hashlib.sha256,
         ).hexdigest()
+        endpoint = "/v1/extract" if schema is not None else "/v1/generate"
+        registry = await self.store.registry()
+        decision = rank_candidates(
+            registry,
+            RoutingInput(
+                tenant_id=principal.tenant_id,
+                task_type=request.task_type,
+                quality_tier=request.quality_tier,
+                text=request.input,
+                schema=cast(dict[str, object] | None, schema),
+                max_output_tokens=request.max_output_tokens,
+                remaining_deadline_ms=max(
+                    0, request.latency_budget_ms - int((monotonic() - started) * 1000)
+                ),
+                max_cost_usd=request.max_cost_usd,
+                # Milestone 2 has no shared circuit-health implementation yet.
+                # Only the offline mock can be dispatched by this service.
+                health={"mock": Decimal("1")},
+            ),
+        )
+        evidence = cast(dict[str, JSONValue], sanitized_evidence(registry, decision))
+        if decision.selected is None or decision.selected.payload.provider != "mock":
+            reasons = sorted({reason for item in decision.ranked for reason in item.reasons})
+            if decision.selected is not None:
+                evidence["dispatch_exclusion"] = "live_dispatch_gated"
+                reasons.append("live_dispatch_gated")
+            await self.store.reject_routing(
+                principal,
+                request_id,
+                endpoint,
+                input_hash,
+                schema_hash,
+                registry.policy_id,
+                registry.policy_version,
+                evidence,
+            )
+            raise GatewayError(
+                "NO_ELIGIBLE_MODEL",
+                "No eligible offline model: " + ", ".join(reasons or ["unavailable"]),
+                503,
+            )
+        selected = decision.selected
+        snapshot = ExecutionSnapshot(
+            registry.policy_id,
+            registry.policy_version,
+            selected.id,
+            selected.pricing_id,
+            selected.pricing_version,
+            selected.pricing.input_per_million,
+            selected.pricing.output_per_million,
+            selected.payload.provider,
+            selected.payload.model,
+            evidence,
+        )
         dispatch = await self.store.begin(
             principal,
             request_id,
-            "/v1/extract" if schema is not None else "/v1/generate",
+            endpoint,
             input_hash,
             schema_hash,
             snapshot,
         )
         usage = TokenUsage(None, None, "unknown")
+        selected_evidence = next(item for item in decision.ranked if item.eligible)
+        upper_cost = selected_evidence.estimated_max_cost_usd or Decimal("0")
+        recorded_cost = upper_cost
         finish_reason: FinishReason | None = None
         error_class: str | None = None
         failure: GatewayError | None = None
         output: JSONValue = None
         result_provider, result_model = "mock", "mock-text-v1"
         try:
+            if not await self.store.provider_enabled(snapshot.provider):
+                recorded_cost = Decimal("0")
+                raise GatewayError(
+                    "NO_ELIGIBLE_MODEL", "Provider was disabled before dispatch.", 503
+                )
             remaining = request.latency_budget_ms / 1000 - (monotonic() - started)
             if remaining <= 0:
+                recorded_cost = Decimal("0")
                 raise TimeoutError()
             result = await asyncio.wait_for(
                 self.provider.invoke(
@@ -119,6 +184,10 @@ class GatewayService:
                 remaining,
             )
             usage, finish_reason = result.usage, result.finish_reason
+            if usage.input_tokens is not None and usage.output_tokens is not None:
+                recorded_cost = maximum_cost(
+                    selected.pricing, usage.input_tokens, usage.output_tokens
+                )
             result_provider, result_model = result.provider, result.model
             output = result.output
             if schema is not None:
@@ -129,6 +198,10 @@ class GatewayService:
                 output = validate_output(result.output, schema)
         except ProviderFailure as error:
             usage, error_class = error.usage, error.kind.value
+            if usage.input_tokens is not None and usage.output_tokens is not None:
+                recorded_cost = maximum_cost(
+                    selected.pricing, usage.input_tokens, usage.output_tokens
+                )
             if error.kind == FailureKind.INVALID_REQUEST:
                 failure = GatewayError(
                     "UPSTREAM_REQUEST_REJECTED", "Provider rejected the request.", 502
@@ -141,7 +214,10 @@ class GatewayService:
             error_class = "timeout"
             failure = GatewayError("DEADLINE_EXCEEDED", "Request deadline expired.", 504)
         except GatewayError as error:
-            error_class, failure = "output_validation", error
+            error_class, failure = (
+                "provider_disabled" if error.code == "NO_ELIGIBLE_MODEL" else "output_validation",
+                error,
+            )
         except asyncio.CancelledError:
             await asyncio.shield(
                 self.store.finish(
@@ -149,7 +225,7 @@ class GatewayService:
                     "uncertain",
                     finish_reason,
                     usage,
-                    Decimal("0"),
+                    recorded_cost,
                     "EXECUTION_UNCERTAIN",
                     "cancelled",
                 )
@@ -161,7 +237,7 @@ class GatewayService:
                 "failed" if failure else "completed",
                 finish_reason,
                 usage,
-                Decimal("0"),
+                recorded_cost,
                 failure.code if failure else None,
                 error_class,
             )
@@ -185,9 +261,10 @@ class GatewayService:
                 complete=usage.input_tokens is not None and usage.output_tokens is not None,
                 attempt_count=1,
             ),
-            "estimated_cost_usd": Decimal("0"),
+            "estimated_cost_usd": recorded_cost,
             "latency_ms": (monotonic() - started) * 1000,
             "policy_version": snapshot.policy_version,
+            "routing": snapshot.routing_evidence,
         }
         if schema is not None:
             return ExtractResponse.model_validate({**common, "output": output})

@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "llm-reliability-gateway"
 version = "0.1.0"
-description = "Offline-first provider-neutral LLM gateway foundation"
+description = "Offline-first provider-neutral LLM gateway with fixture-tested routing"
 requires-python = ">=3.12,<3.13"
 dependencies = [
   "fastapi>=0.115,<1",
@@ -16,6 +16,8 @@ dependencies = [
   "alembic>=1.15,<2",
   "jsonschema>=4.23,<5",
   "redis>=5.2,<7",
+  "openai==3.16.2",
+  "anthropic==1.7.0",
 ]
 
 [project.scripts]

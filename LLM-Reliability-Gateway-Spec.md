@@ -1,9 +1,10 @@
 # LLM Reliability Gateway
 
-Status: full baseline proposed; milestone 1 offline foundation implemented.
+Status: full baseline proposed; milestones 1–2 implemented offline.
 This is the entry point to the refined specification. See the
-[quickstart](docs/quickstart.md) and [foundation evidence](docs/milestone-1-verification.md)
-for delivered behavior; later capabilities are not implemented. It supersedes the informal handoff preserved unchanged in
+[quickstart](docs/quickstart.md), [foundation evidence](docs/milestone-1-verification.md),
+and [routing evidence](docs/milestone-2-verification.md) for delivered behavior;
+later capabilities are not implemented. It supersedes the informal handoff preserved unchanged in
 [docs/reference/original-handoff.md](docs/reference/original-handoff.md).
 
 ## Objective
@@ -30,7 +31,8 @@ or unsupported resume claims.
   staging with security, deployment, and rollback evidence.
 
 These capabilities form the full baseline program, not the first milestone.
-The delivered first milestone is an offline mock-backed generation/extraction slice.
+The delivered first two milestones cover offline mock execution and fixture-tested
+provider routing; live execution is still disabled.
 See the [roadmap](docs/roadmap.md) for incremental gates.
 
 ## Normative capability specifications
@@ -61,9 +63,9 @@ or archive the initial program merely because its planning files validate.
 - `GET /v1/metrics/summary`: authorized bounded-window operational summary.
 - `GET /health/live` and `GET /health/ready`: liveness and sanitized readiness.
 
-The foundation publishes wire types/defaults through OpenAPI at `/openapi.json`.
-Unavailable cache/idempotency execution is rejected explicitly; live routing and
-other later capabilities remain gated. Capability specs
+The service publishes wire types/defaults through OpenAPI at `/openapi.json`.
+Unavailable cache/idempotency execution is rejected explicitly; routing evidence
+uses the mock runtime, while live dispatch and later capabilities remain gated. Capability specs
 are the behavior contract; the [design](openspec/changes/build-llm-reliability-gateway/design.md)
 records proposed stack, defaults, state ownership, and control paths. Configuration
 changes/invalidation initially use a validated authorized operator CLI; an

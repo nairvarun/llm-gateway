@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import json
 import stat
 from pathlib import Path
 
@@ -8,6 +9,7 @@ from sqlalchemy import func, select, text
 
 from app.cli import run, wait_database, write_private_key
 from app.domain.models import StateUnavailable
+from app.persistence.bootstrap import bootstrap_local
 from app.persistence.database import database_engine
 from app.persistence.models import Credential
 from app.persistence.store import PostgresStore
@@ -54,3 +56,71 @@ async def test_startup_wait_is_bounded() -> None:
             await wait_database(PostgresStore(engine), 0.05)
     finally:
         await engine.dispose()
+
+
+@pytest.mark.integration
+async def test_operator_routing_cli_commands(
+    postgres: PostgresStore,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    async with postgres.engine.connect() as connection:
+        schema = await connection.scalar(text("SELECT current_schema()"))
+    monkeypatch.setenv("GATEWAY_DATABASE_SCHEMA", str(schema))
+    monkeypatch.setenv(
+        "GATEWAY_DATABASE_URL", str(postgres.engine.url.render_as_string(hide_password=False))
+    )
+    tenant_key, tenant = await bootstrap_local(postgres)
+    operator_key, _ = await bootstrap_local(postgres, role="operator")
+    tenant_file, operator_file = tmp_path / "tenant", tmp_path / "operator"
+    write_private_key(tenant_file, tenant_key)
+    write_private_key(operator_file, operator_key)
+    policy = (await postgres.registry()).policy.model_dump(mode="json")
+    policy_file = tmp_path / "policy.json"
+    policy_file.write_text(json.dumps(policy))
+    await run(
+        argparse.Namespace(
+            command="publish-config",
+            key_file=str(operator_file),
+            kind="policy",
+            name="mock-policy",
+            version="cli-v1",
+            payload_file=str(policy_file),
+        )
+    )
+    await run(
+        argparse.Namespace(
+            command="activate-policy",
+            key_file=str(operator_file),
+            name="mock-policy",
+            version="cli-v1",
+        )
+    )
+    assert (await postgres.registry()).policy_version == "cli-v1"
+    await run(
+        argparse.Namespace(
+            command="disable-provider",
+            key_file=str(operator_file),
+            provider="mock",
+        )
+    )
+    assert "mock" in (await postgres.registry()).disabled_providers
+    await run(
+        argparse.Namespace(
+            command="enable-provider",
+            key_file=str(operator_file),
+            provider="mock",
+        )
+    )
+    await run(
+        argparse.Namespace(
+            command="rollback-policy",
+            key_file=str(operator_file),
+            name="mock-policy",
+            version="v2",
+        )
+    )
+    assert (await postgres.registry()).policy_version == "v2"
+    assert tenant.role == "tenant"
+    assert operator_key not in capsys.readouterr().out
