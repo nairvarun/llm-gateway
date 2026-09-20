@@ -1,6 +1,8 @@
 from dataclasses import dataclass
+from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
+from math import isfinite
 from typing import TYPE_CHECKING, Protocol
 from uuid import UUID
 
@@ -23,6 +25,7 @@ class FailureKind(StrEnum):
     CONNECTION = "connection"
     RATE_LIMIT = "rate_limit"
     SERVER = "server"
+    SERVER_PERMANENT = "server_permanent"
     CREDENTIAL = "credential"
     INVALID_REQUEST = "invalid_request"
 
@@ -50,6 +53,7 @@ class ProviderInput:
     schema: JSONSchema | None = None
     temperature: float = 0
     max_output_tokens: int = 512
+    validation_retry: bool = False
 
 
 @dataclass(frozen=True)
@@ -62,11 +66,23 @@ class ProviderResult:
 
 
 class ProviderFailure(Exception):
-    def __init__(self, kind: FailureKind, usage: TokenUsage | None = None) -> None:
+    def __init__(
+        self,
+        kind: FailureKind,
+        usage: TokenUsage | None = None,
+        retry_after_seconds: float | None = None,
+    ) -> None:
         # Deliberately omit provider wire messages and request content.
         super().__init__(kind.value)
         self.kind = kind
         self.usage = usage or TokenUsage(None, None, "unknown")
+        self.retry_after_seconds = (
+            retry_after_seconds
+            if retry_after_seconds is not None
+            and isfinite(retry_after_seconds)
+            and retry_after_seconds >= 0
+            else None
+        )
 
 
 class Provider(Protocol):
@@ -96,6 +112,7 @@ class ExecutionSnapshot:
     provider: str = "mock"
     model: str = "mock-text-v1"
     routing_evidence: dict[str, JSONValue] | None = None
+    estimated_max_cost_usd: Decimal = Decimal("0")
 
 
 @dataclass(frozen=True)
@@ -115,7 +132,37 @@ class RequestEvidence:
     routing_evidence: dict[str, JSONValue] | None = None
 
 
+@dataclass(frozen=True)
+class IdempotencyClaim:
+    status: str
+    original_request_id: UUID
+    encrypted_result: bytes | None = None
+
+
 class Store(Protocol):
+    async def claim_idempotency(
+        self,
+        principal: Principal,
+        endpoint: str,
+        key_hash: str,
+        fingerprint: str,
+        ingress_id: UUID,
+        expires_at: datetime,
+        owner_expires_at: datetime,
+    ) -> IdempotencyClaim: ...
+
+    async def seal_idempotency(
+        self,
+        tenant_id: UUID,
+        endpoint: str,
+        key_hash: str,
+        original_request_id: UUID,
+        status: str,
+        encrypted_result: bytes,
+    ) -> None: ...
+
+    async def mark_idempotency_uncertain(self, original_request_id: UUID) -> None: ...
+
     async def authenticate(self, key_hash: str) -> Principal | None: ...
 
     async def ready(self) -> bool: ...
@@ -148,6 +195,25 @@ class Store(Protocol):
         policy_id: UUID,
         policy_version: str,
         routing_evidence: dict[str, JSONValue],
+        error_code: str = "NO_ELIGIBLE_MODEL",
+    ) -> None: ...
+
+    async def add_attempt(
+        self, request_id: UUID, number: int, snapshot: ExecutionSnapshot
+    ) -> Dispatch: ...
+
+    async def settle_attempt(
+        self,
+        dispatch: Dispatch,
+        status: str,
+        finish_reason: FinishReason | None,
+        usage: TokenUsage,
+        cost: Decimal,
+        error_class: str | None,
+    ) -> None: ...
+
+    async def complete_request(
+        self, request_id: UUID, status: str, error_code: str | None
     ) -> None: ...
 
     async def finish(

@@ -89,7 +89,7 @@ class PolicyPayload(BaseModel):
     weights: PolicyWeights
     affordability_reference_usd: Decimal = Field(gt=0)
     minimum_deadline_ms: int = Field(ge=0)
-    attempt_limit: int = Field(ge=1, le=16)
+    attempt_limit: int = Field(ge=1, le=4)
     fallback_enabled: bool = False
 
     @model_validator(mode="after")
@@ -133,6 +133,7 @@ class RoutingInput:
     remaining_deadline_ms: int
     max_cost_usd: Decimal | None
     health: dict[str, Decimal]
+    available_adapters: frozenset[tuple[str, str]] | None = None
 
 
 @dataclass(frozen=True)
@@ -220,6 +221,11 @@ def rank_candidates(snapshot: RegistrySnapshot, request: RoutingInput) -> Routin
         reasons: list[str] = []
         if not profile.enabled or profile.provider in snapshot.disabled_providers:
             reasons.append("disabled")
+        if (
+            request.available_adapters is not None
+            and (profile.provider, profile.model) not in request.available_adapters
+        ):
+            reasons.append("adapter_unavailable")
         if request.task_type not in profile.tasks:
             reasons.append("task_unsupported")
         if request.schema is not None and not profile.structured_output:

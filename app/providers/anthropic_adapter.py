@@ -13,14 +13,21 @@ from app.domain.models import (
     ProviderResult,
     TokenUsage,
 )
+from app.domain.retry import parse_retry_after
 
 
 class AnthropicProvider:
     def __init__(
-        self, client: anthropic.AsyncAnthropic, model: str = "claude-haiku-4-5-20251001"
+        self,
+        client: anthropic.AsyncAnthropic,
+        model: str = "claude-haiku-4-5-20251001",
+        transient_statuses: frozenset[int] = frozenset({500, 502, 503, 504}),
     ) -> None:
+        if any(status < 500 or status > 599 for status in transient_statuses):
+            raise ValueError("Transient statuses must be 5xx")
         self.client = client
         self.model = model
+        self.transient_statuses = transient_statuses
 
     @property
     def capabilities(self) -> ProviderCapabilities:
@@ -34,6 +41,11 @@ class AnthropicProvider:
                 "Return only JSON matching this schema. Do not include Markdown or commentary. "
                 + schema
             )
+            if request.validation_retry:
+                system += (
+                    " Prior output failed local validation. Return one complete JSON value "
+                    "satisfying the same schema; do not repeat prior output."
+                )
         try:
             result = await self.client.with_options(max_retries=0).messages.create(
                 model=self.model,
@@ -55,14 +67,26 @@ class AnthropicProvider:
         except anthropic.PermissionDeniedError as error:
             raise ProviderFailure(FailureKind.CREDENTIAL) from error
         except anthropic.RateLimitError as error:
-            raise ProviderFailure(FailureKind.RATE_LIMIT) from error
+            raise ProviderFailure(
+                FailureKind.RATE_LIMIT,
+                retry_after_seconds=parse_retry_after(error.response.headers.get("retry-after")),
+            ) from error
         except anthropic.BadRequestError as error:
             raise ProviderFailure(FailureKind.INVALID_REQUEST) from error
         except anthropic.APIStatusError as error:
-            kind = FailureKind.SERVER if error.status_code >= 500 else FailureKind.INVALID_REQUEST
-            raise ProviderFailure(kind) from error
+            kind = (
+                FailureKind.SERVER
+                if error.status_code in self.transient_statuses
+                else FailureKind.SERVER_PERMANENT
+                if error.status_code >= 500
+                else FailureKind.INVALID_REQUEST
+            )
+            raise ProviderFailure(
+                kind,
+                retry_after_seconds=parse_retry_after(error.response.headers.get("retry-after")),
+            ) from error
         except anthropic.APIError as error:
-            raise ProviderFailure(FailureKind.SERVER) from error
+            raise ProviderFailure(FailureKind.SERVER_PERMANENT) from error
         usage_source = getattr(result, "usage", None)
         usage = (
             TokenUsage(

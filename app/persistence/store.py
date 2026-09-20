@@ -4,7 +4,8 @@ from typing import cast
 from uuid import UUID, uuid4
 
 from pydantic import ValidationError
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
@@ -12,6 +13,7 @@ from app.domain.models import (
     Dispatch,
     ExecutionSnapshot,
     FinishReason,
+    IdempotencyClaim,
     JSONSchema,
     JSONValue,
     Principal,
@@ -32,6 +34,8 @@ from app.persistence.models import (
     AuditEvent,
     ConfigurationVersion,
     Credential,
+    IdempotencyIngress,
+    IdempotencyRecord,
     RequestRecord,
     RoutingControl,
     SchemaVersion,
@@ -67,7 +71,7 @@ class PostgresStore:
         try:
             async with self.sessions() as session:
                 revision = await session.scalar(text("SELECT version_num FROM alembic_version"))
-                if revision != "0002_routing_control":
+                if revision != "0004_replay_recovery_index":
                     return False
             await self.registry()
             return True
@@ -179,6 +183,162 @@ class PostgresStore:
         except (SQLAlchemyError, OSError, TimeoutError) as error:
             raise StateUnavailable() from error
 
+    async def claim_idempotency(
+        self,
+        principal: Principal,
+        endpoint: str,
+        key_hash: str,
+        fingerprint: str,
+        ingress_id: UUID,
+        expires_at: datetime,
+        owner_expires_at: datetime,
+    ) -> IdempotencyClaim:
+        try:
+            async with self.sessions.begin() as session:
+                identity = (principal.tenant_id, endpoint, key_hash)
+                inserted = await session.scalar(
+                    insert(IdempotencyRecord)
+                    .values(
+                        tenant_id=identity[0],
+                        endpoint=identity[1],
+                        key_hash=identity[2],
+                        fingerprint=fingerprint,
+                        original_request_id=ingress_id,
+                        status="in_progress",
+                        expires_at=expires_at,
+                        owner_expires_at=owner_expires_at,
+                    )
+                    .on_conflict_do_nothing(index_elements=["tenant_id", "endpoint", "key_hash"])
+                    .returning(IdempotencyRecord.original_request_id)
+                )
+                if inserted is not None:
+                    return IdempotencyClaim("owned", ingress_id)
+                row = await session.scalar(
+                    select(IdempotencyRecord)
+                    .where(
+                        IdempotencyRecord.tenant_id == identity[0],
+                        IdempotencyRecord.endpoint == identity[1],
+                        IdempotencyRecord.key_hash == identity[2],
+                    )
+                    .with_for_update()
+                )
+                if row is None:
+                    raise StateUnavailable()
+                now = datetime.now(UTC)
+                if row.expires_at <= now:
+                    row.fingerprint = fingerprint
+                    row.original_request_id = ingress_id
+                    row.status = "in_progress"
+                    row.encrypted_result = None
+                    row.expires_at = expires_at
+                    row.owner_expires_at = owner_expires_at
+                    row.updated_at = now
+                    return IdempotencyClaim("owned", ingress_id)
+                if row.fingerprint != fingerprint:
+                    outcome = "conflict"
+                elif row.status == "in_progress" and row.owner_expires_at <= now:
+                    outcome = "uncertain"
+                    row.status = "uncertain"
+                    row.updated_at = now
+                    request = await session.get(RequestRecord, row.original_request_id)
+                    if request is not None and request.status == "in_progress":
+                        request.status = "uncertain"
+                        request.error_code = "EXECUTION_UNCERTAIN"
+                        request.completed_at = now
+                        attempts = (
+                            await session.scalars(
+                                select(Attempt).where(
+                                    Attempt.request_id == request.id,
+                                    Attempt.outcome == "dispatched",
+                                )
+                            )
+                        ).all()
+                        for attempt in attempts:
+                            attempt.outcome = "uncertain"
+                            attempt.error_class = "worker_lost"
+                            attempt.completed_at = now
+                            session.add(
+                                UsageEvent(
+                                    attempt_id=attempt.id,
+                                    request_id=request.id,
+                                    tenant_id=request.tenant_id,
+                                    pricing_id=attempt.pricing_id,
+                                    input_tokens=None,
+                                    output_tokens=None,
+                                    usage_status="unknown",
+                                    estimated_cost_usd=attempt.reserved_upper_cost_usd,
+                                )
+                            )
+                elif row.status == "in_progress":
+                    outcome = "in_progress"
+                elif row.status in {"completed", "failed"} and row.encrypted_result is not None:
+                    outcome = "replay"
+                else:
+                    outcome = "uncertain"
+                session.add(
+                    IdempotencyIngress(
+                        ingress_request_id=ingress_id,
+                        tenant_id=principal.tenant_id,
+                        endpoint=endpoint,
+                        original_request_id=row.original_request_id,
+                        outcome=outcome,
+                    )
+                )
+                return IdempotencyClaim(outcome, row.original_request_id, row.encrypted_result)
+        except (SQLAlchemyError, OSError, TimeoutError) as error:
+            raise StateUnavailable() from error
+
+    async def seal_idempotency(
+        self,
+        tenant_id: UUID,
+        endpoint: str,
+        key_hash: str,
+        original_request_id: UUID,
+        status: str,
+        encrypted_result: bytes,
+    ) -> None:
+        if status not in {"completed", "failed"}:
+            raise ValueError("Only completed or failed executions can be replayed")
+        try:
+            async with self.sessions.begin() as session:
+                row = await session.scalar(
+                    select(IdempotencyRecord)
+                    .where(
+                        IdempotencyRecord.tenant_id == tenant_id,
+                        IdempotencyRecord.endpoint == endpoint,
+                        IdempotencyRecord.key_hash == key_hash,
+                    )
+                    .with_for_update()
+                )
+                request = await session.get(RequestRecord, original_request_id)
+                if (
+                    row is None
+                    or row.original_request_id != original_request_id
+                    or row.status != "in_progress"
+                    or request is None
+                    or request.status != status
+                ):
+                    raise StateUnavailable()
+                row.status = status
+                row.encrypted_result = encrypted_result
+                row.updated_at = datetime.now(UTC)
+        except (SQLAlchemyError, OSError, TimeoutError) as error:
+            raise StateUnavailable() from error
+
+    async def mark_idempotency_uncertain(self, original_request_id: UUID) -> None:
+        try:
+            async with self.sessions.begin() as session:
+                row = await session.scalar(
+                    select(IdempotencyRecord)
+                    .where(IdempotencyRecord.original_request_id == original_request_id)
+                    .with_for_update()
+                )
+                if row is not None and row.status == "in_progress":
+                    row.status = "uncertain"
+                    row.updated_at = datetime.now(UTC)
+        except (SQLAlchemyError, OSError, TimeoutError) as error:
+            raise StateUnavailable() from error
+
     async def begin(
         self,
         principal: Principal,
@@ -213,6 +373,7 @@ class PostgresStore:
                         model=snapshot.model,
                         model_id=snapshot.model_id,
                         pricing_id=snapshot.pricing_id,
+                        reserved_upper_cost_usd=snapshot.estimated_max_cost_usd,
                     )
                 )
             return Dispatch(request_id, attempt_id)
@@ -229,6 +390,7 @@ class PostgresStore:
         policy_id: UUID,
         policy_version: str,
         routing_evidence: dict[str, JSONValue],
+        error_code: str = "NO_ELIGIBLE_MODEL",
     ) -> None:
         try:
             async with self.sessions.begin() as session:
@@ -244,10 +406,121 @@ class PostgresStore:
                         policy_version=policy_version,
                         routing_evidence=routing_evidence,
                         status="failed",
-                        error_code="NO_ELIGIBLE_MODEL",
+                        error_code=error_code,
                         completed_at=datetime.now(UTC),
                     )
                 )
+        except (SQLAlchemyError, OSError, TimeoutError) as error:
+            raise StateUnavailable() from error
+
+    async def add_attempt(
+        self, request_id: UUID, number: int, snapshot: ExecutionSnapshot
+    ) -> Dispatch:
+        if number < 2:
+            raise ValueError("Subsequent attempt number must be at least two")
+        attempt_id = uuid4()
+        try:
+            async with self.sessions.begin() as session:
+                request = await session.scalar(
+                    select(RequestRecord).where(RequestRecord.id == request_id).with_for_update()
+                )
+                if request is None or request.status != "in_progress":
+                    raise StateUnavailable()
+                if (
+                    request.policy_id != snapshot.policy_id
+                    or request.policy_version != snapshot.policy_version
+                ):
+                    raise StateUnavailable()
+                maximum = await session.scalar(
+                    select(func.max(Attempt.number)).where(Attempt.request_id == request_id)
+                )
+                if maximum is None or number != maximum + 1:
+                    raise ValueError("Attempt number is not sequential")
+                session.add(
+                    Attempt(
+                        id=attempt_id,
+                        request_id=request_id,
+                        number=number,
+                        provider=snapshot.provider,
+                        model=snapshot.model,
+                        model_id=snapshot.model_id,
+                        pricing_id=snapshot.pricing_id,
+                        reserved_upper_cost_usd=snapshot.estimated_max_cost_usd,
+                    )
+                )
+            return Dispatch(request_id, attempt_id)
+        except (SQLAlchemyError, OSError, TimeoutError) as error:
+            raise StateUnavailable() from error
+
+    async def settle_attempt(
+        self,
+        dispatch: Dispatch,
+        status: str,
+        finish_reason: FinishReason | None,
+        usage: TokenUsage,
+        cost: Decimal,
+        error_class: str | None,
+    ) -> None:
+        if status not in {"completed", "failed", "uncertain", "not_dispatched"}:
+            raise ValueError("Invalid attempt terminal status")
+        try:
+            async with self.sessions.begin() as session:
+                attempt = await session.scalar(
+                    select(Attempt).where(Attempt.id == dispatch.attempt_id).with_for_update()
+                )
+                if attempt is None or attempt.request_id != dispatch.request_id:
+                    raise StateUnavailable()
+                if attempt.outcome != "dispatched":
+                    return
+                request = await session.get(RequestRecord, attempt.request_id)
+                if request is None or request.status != "in_progress":
+                    raise StateUnavailable()
+                attempt.outcome = status
+                attempt.completed_at = datetime.now(UTC)
+                attempt.finish_reason = finish_reason.value if finish_reason else None
+                attempt.error_class = error_class
+                if error_class == "provider_disabled" and request.routing_evidence is not None:
+                    request.routing_evidence = {
+                        **request.routing_evidence,
+                        "dispatch_exclusion": "provider_disabled",
+                    }
+                session.add(
+                    UsageEvent(
+                        attempt_id=attempt.id,
+                        request_id=request.id,
+                        tenant_id=request.tenant_id,
+                        pricing_id=attempt.pricing_id,
+                        input_tokens=usage.input_tokens,
+                        output_tokens=usage.output_tokens,
+                        usage_status=usage.status,
+                        estimated_cost_usd=cost,
+                    )
+                )
+        except (SQLAlchemyError, OSError, TimeoutError) as error:
+            raise StateUnavailable() from error
+
+    async def complete_request(self, request_id: UUID, status: str, error_code: str | None) -> None:
+        if status not in {"completed", "failed", "uncertain"}:
+            raise ValueError("Invalid request terminal status")
+        try:
+            async with self.sessions.begin() as session:
+                request = await session.scalar(
+                    select(RequestRecord).where(RequestRecord.id == request_id).with_for_update()
+                )
+                if request is None:
+                    raise StateUnavailable()
+                if request.status != "in_progress":
+                    return
+                unfinished = await session.scalar(
+                    select(func.count())
+                    .select_from(Attempt)
+                    .where(Attempt.request_id == request_id, Attempt.outcome == "dispatched")
+                )
+                if unfinished:
+                    raise StateUnavailable()
+                request.status = status
+                request.error_code = error_code
+                request.completed_at = datetime.now(UTC)
         except (SQLAlchemyError, OSError, TimeoutError) as error:
             raise StateUnavailable() from error
 

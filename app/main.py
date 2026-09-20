@@ -1,4 +1,4 @@
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from typing import Annotated, Any
 
@@ -21,6 +21,14 @@ from app.api.schemas import (
     HealthResponse,
 )
 from app.config import Settings, load_settings
+from app.domain.control import (
+    Control,
+    ControlLimits,
+    LocalControl,
+    RedisControl,
+    UnavailableControl,
+)
+from app.domain.deadline import DeadlineExpired
 from app.domain.errors import GatewayError
 from app.domain.models import Principal, Provider, StateUnavailable, Store
 from app.persistence.database import database_engine
@@ -40,6 +48,8 @@ def create_app(
     *,
     store: Store | None = None,
     provider: Provider | None = None,
+    providers: Mapping[tuple[str, str], Provider] | None = None,
+    control: Control | None = None,
 ) -> FastAPI:
     settings = settings or load_settings()
     engine = (
@@ -51,23 +61,52 @@ def create_app(
         assert engine is not None
         store = PostgresStore(engine)
     provider = provider or MockProvider([MockStep(settings.mock_scenario)])
-    service = GatewayService(settings, store, provider)
-    active_store, active_settings = store, settings
+    control_redis = (
+        Redis.from_url(
+            settings.redis_url.get_secret_value(),
+            socket_timeout=1,
+            socket_connect_timeout=1,
+        )
+        if settings.redis_url is not None
+        else None
+    )
+    if control is None:
+        if control_redis is not None:
+            control = RedisControl(
+                control_redis,
+                ControlLimits(
+                    tenant_concurrency=settings.tenant_concurrency,
+                    provider_concurrency=settings.provider_concurrency,
+                    tenant_rate_per_minute=settings.tenant_rate_per_minute,
+                    provider_rate_per_minute=settings.provider_rate_per_minute,
+                    failure_threshold=settings.circuit_failure_threshold,
+                    failure_window_seconds=settings.circuit_window_seconds,
+                    open_cooldown_seconds=settings.circuit_cooldown_seconds,
+                    probe_lease_seconds=settings.circuit_probe_lease_seconds,
+                ),
+            )
+        else:
+            control = LocalControl() if engine is None else UnavailableControl()
+    service = GatewayService(settings, store, provider, providers=providers, control=control)
+    active_store = store
 
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         yield
         if engine is not None:
             await engine.dispose()
+        if control_redis is not None:
+            await control_redis.aclose()
 
     application = FastAPI(
         title="LLM Reliability Gateway",
         version="0.1.0",
         lifespan=lifespan,
         description=(
-            "Milestones 1–2: single-attempt offline mock execution with versioned routing "
-            "evidence. Live adapters are fixture-tested but cannot dispatch through this API; "
-            "retries, budgets, cache, keyed replay, and evaluation execution remain unavailable."
+            "Milestones 1–3: offline mock execution with versioned routing, bounded retries, "
+            "shared Redis admission/circuits, and optional encrypted keyed replay. Live adapters "
+            "are fixture-tested but cannot dispatch through this API; atomic budgets, exact "
+            "cache, evaluation execution, and staging remain unavailable."
         ),
     )
     application.add_middleware(RequestBoundary, limit=settings.body_limit_bytes)
@@ -75,9 +114,17 @@ def create_app(
     def error_response(request: Request, error: GatewayError) -> JSONResponse:
         envelope = ErrorResponse(
             request_id=request.state.request_id,
+            original_request_id=error.original_request_id,
             error=ErrorDetail(code=error.code, message=error.message, retryable=error.retryable),
         )
-        return JSONResponse(envelope.model_dump(mode="json"), status_code=error.status)
+        headers = (
+            {"Retry-After": str(error.retry_after_seconds)}
+            if error.retry_after_seconds is not None
+            else None
+        )
+        return JSONResponse(
+            envelope.model_dump(mode="json"), status_code=error.status, headers=headers
+        )
 
     @application.exception_handler(GatewayError)
     async def gateway_error(request: Request, error: GatewayError) -> JSONResponse:
@@ -93,6 +140,12 @@ def create_app(
                 503,
                 retryable=True,
             ),
+        )
+
+    @application.exception_handler(DeadlineExpired)
+    async def deadline_error(request: Request, error: DeadlineExpired) -> JSONResponse:
+        return error_response(
+            request, GatewayError("DEADLINE_EXCEEDED", "Request deadline expired.", 504)
         )
 
     @application.exception_handler(RequestValidationError)
@@ -155,20 +208,25 @@ def create_app(
             "telemetry": "not_configured",
             "cache": "not_configured",
         }
-        if active_settings.redis_url is not None:
-            redis = Redis.from_url(
-                active_settings.redis_url.get_secret_value(),
-                socket_timeout=1,
-                socket_connect_timeout=1,
-            )
+        control_healthy = False
+        if control_redis is not None:
             try:
-                await redis.ping()
-                components["redis"] = "healthy_optional"
-            except (OSError, TimeoutError, RedisError):
-                components["redis"] = "degraded_optional"
-            finally:
-                await redis.aclose()
-        response = HealthResponse(status="ready" if healthy else "not_ready", components=components)
-        return JSONResponse(response.model_dump(mode="json"), status_code=200 if healthy else 503)
+                await control_redis.ping()
+                control_healthy = True
+                components["redis"] = "healthy"
+                if isinstance(control, RedisControl):
+                    circuit = await control.snapshot("mock")
+                    components["circuit.mock"] = circuit.state
+                    components["circuit.mock.transient_failures"] = str(circuit.transient_failures)
+            except (OSError, TimeoutError, RedisError, StateUnavailable):
+                components["redis"] = "unavailable_critical"
+        else:
+            components["redis"] = "local_test_only" if engine is None else "unconfigured_critical"
+            control_healthy = engine is None
+        ready_now = healthy and control_healthy
+        response = HealthResponse(
+            status="ready" if ready_now else "not_ready", components=components
+        )
+        return JSONResponse(response.model_dump(mode="json"), status_code=200 if ready_now else 503)
 
     return application

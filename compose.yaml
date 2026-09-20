@@ -34,6 +34,7 @@ services:
       GATEWAY_PROVIDER: mock
       GATEWAY_DATABASE_URL: postgresql+asyncpg://gateway:local-development-only@postgres:5432/gateway
       GATEWAY_REDIS_URL: redis://redis:6379
+      GATEWAY_REPLAY_ENCRYPTION_KEY: ${GATEWAY_REPLAY_ENCRYPTION_KEY:-}
       GATEWAY_MOCK_SCENARIO: ${GATEWAY_MOCK_SCENARIO:-success}
     ports:
       - "127.0.0.1:${GATEWAY_HTTP_PORT:-8000}:8000"

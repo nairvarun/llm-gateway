@@ -20,6 +20,7 @@ SCENARIOS = frozenset(
         "connection",
         "rate_limit",
         "server",
+        "server_permanent",
         "credential",
         "invalid_request",
         "malformed",
@@ -36,10 +37,13 @@ class MockStep:
     scenario: str = "success"
     output: str | None = None
     delay_seconds: float = 0
+    retry_after_seconds: float | None = None
 
     def __post_init__(self) -> None:
         if self.scenario not in SCENARIOS or self.delay_seconds < 0:
             raise ValueError("Invalid mock step")
+        if self.retry_after_seconds is not None and self.retry_after_seconds < 0:
+            raise ValueError("Invalid Retry-After")
 
 
 class MockProvider:
@@ -49,15 +53,20 @@ class MockProvider:
     metadata. Extraction echoes JSON input; this is not a real language model.
     """
 
-    def __init__(self, steps: Sequence[MockStep] = (MockStep(),)) -> None:
+    def __init__(
+        self, steps: Sequence[MockStep] = (MockStep(),), *, model: str = "mock-text-v1"
+    ) -> None:
         if not steps:
             raise ValueError("At least one mock step is required")
+        if not model or len(model) > 100:
+            raise ValueError("Invalid mock model identity")
         self._steps = tuple(steps)
+        self.model = model
         self.invocations = 0
 
     @property
     def capabilities(self) -> ProviderCapabilities:
-        return ProviderCapabilities("mock", "mock-text-v1", True, 100_000, 16_384)
+        return ProviderCapabilities("mock", self.model, True, 100_000, 16_384)
 
     async def invoke(self, request: ProviderInput) -> ProviderResult:
         step = self._steps[min(self.invocations, len(self._steps) - 1)]
@@ -65,7 +74,9 @@ class MockProvider:
         if step.delay_seconds:
             await asyncio.sleep(step.delay_seconds)
         if step.scenario in {kind.value for kind in FailureKind}:
-            raise ProviderFailure(FailureKind(step.scenario))
+            raise ProviderFailure(
+                FailureKind(step.scenario), retry_after_seconds=step.retry_after_seconds
+            )
         output = step.output
         if output is None:
             output = (
@@ -88,4 +99,4 @@ class MockProvider:
         usage = TokenUsage((len(request.text) + 3) // 4, (len(output) + 3) // 4, "synthetic")
         if step.scenario == "missing_usage":
             usage = TokenUsage(None, None, "unknown")
-        return ProviderResult(output, "mock", "mock-text-v1", finish_reason, usage)
+        return ProviderResult(output, "mock", self.model, finish_reason, usage)

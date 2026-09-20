@@ -3,7 +3,8 @@
 See [proposal.md](proposal.md) for motivation and capability scope. At proposal
 creation the repository had no application code or API/data migrations. Milestone
 1 now supplies the offline foundation; see [its verification report](../../../docs/milestone-1-verification.md).
-The remaining design describes planned, unimplemented milestones. The historical handoff
+Milestones 2–3 now add offline routing and reliability evidence; remaining budget,
+cache, evaluation, and deployment decisions describe planned work. The historical handoff
 is preserved in [the reference snapshot](../../../docs/reference/original-handoff.md).
 The capability files under `specs/` describe the full planned contract; only the
 completed foundation tasks have implementation evidence.

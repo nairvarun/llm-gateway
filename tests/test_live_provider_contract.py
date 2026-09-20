@@ -26,6 +26,7 @@ FIXTURES = Path(__file__).parent / "fixtures" / "providers"
 ERROR_STATUS = {
     "rate_limit": 429,
     "server": 503,
+    "server_permanent": 501,
     "credential": 401,
     "invalid_request": 400,
 }

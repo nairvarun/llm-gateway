@@ -1,8 +1,8 @@
 # Delivery and measurement plan
 
-Status: milestones 1–2 implemented offline; reliability, budget/cache,
+Status: milestones 1–3 implemented offline; budget/cache,
 evaluation, benchmark targets, and cloud deployment remain planned. See
-[routing verification](milestone-2-verification.md) for evidence and limits.
+[reliability verification](milestone-3-verification.md) for evidence and limits.
 Use the [task checklist](../openspec/changes/build-llm-reliability-gateway/tasks.md)
 for progress and the [design](../openspec/changes/build-llm-reliability-gateway/design.md)
 for assumptions. Capability specs, not this roadmap, define behavior.

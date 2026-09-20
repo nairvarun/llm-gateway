@@ -33,7 +33,7 @@ async def test_migration_and_immutable_versions(postgres: PostgresStore) -> None
     assert await postgres.ready()
     async with postgres.sessions() as session:
         revision = await session.scalar(text("SELECT version_num FROM alembic_version"))
-        assert revision == "0002_routing_control"
+        assert revision == "0004_replay_recovery_index"
     async with postgres.sessions.begin() as session:
         with pytest.raises(DBAPIError):
             await session.execute(text("UPDATE configuration_versions SET version = 'v2'"))
@@ -181,6 +181,56 @@ async def test_usage_event_uniqueness_and_idempotent_terminal_recording(
         with pytest.raises(IntegrityError):
             await session.flush()
         await session.rollback()
+
+
+async def test_separate_attempt_records_preserve_usage_before_request_terminal(
+    postgres: PostgresStore,
+) -> None:
+    _, principal = await bootstrap_local(postgres)
+    snapshot = await postgres.snapshot()
+    request_id = uuid4()
+    first = await postgres.begin(principal, request_id, "/v1/generate", "0" * 64, None, snapshot)
+    await postgres.settle_attempt(
+        first,
+        "uncertain",
+        None,
+        TokenUsage(None, None, "unknown"),
+        Decimal("0"),
+        "timeout",
+    )
+    await postgres.settle_attempt(
+        first,
+        "uncertain",
+        None,
+        TokenUsage(None, None, "unknown"),
+        Decimal("0"),
+        "timeout",
+    )
+    second = await postgres.add_attempt(request_id, 2, snapshot)
+    with pytest.raises(ValueError):
+        await postgres.add_attempt(request_id, 4, snapshot)
+    await postgres.settle_attempt(
+        second,
+        "completed",
+        FinishReason.STOP,
+        TokenUsage(2, 3, "synthetic"),
+        Decimal("0"),
+        None,
+    )
+    await postgres.complete_request(request_id, "completed", None)
+    async with postgres.sessions() as session:
+        attempts = (
+            await session.scalars(
+                select(Attempt).where(Attempt.request_id == request_id).order_by(Attempt.number)
+            )
+        ).all()
+        usage = (
+            await session.scalars(select(UsageEvent).where(UsageEvent.request_id == request_id))
+        ).all()
+        assert [item.outcome for item in attempts] == ["uncertain", "completed"]
+        assert len(usage) == 2
+        assert usage[0].usage_status == "unknown"
+        assert usage[1].usage_status == "synthetic"
 
 
 @pytest.mark.parametrize("scenario", ["success", "malformed", "credential", "missing_usage"])

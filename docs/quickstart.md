@@ -1,7 +1,8 @@
-# Offline quickstart (milestones 1–2)
+# Offline quickstart (milestones 1–3)
 
 This runs the offline service: authenticated generation, locally validated
-extraction, a deterministic mock, versioned routing, and durable PostgreSQL evidence. No paid
+extraction, a deterministic mock, versioned routing, bounded retries, shared
+Redis controls, optional keyed replay, and durable PostgreSQL evidence. No paid
 provider/AWS account is needed. Internet access is needed initially to download
 Python packages and container images; provider invocations themselves are offline.
 
@@ -9,7 +10,7 @@ Python packages and container images; provider invocations themselves are offlin
 
 - `uv` and Python 3.12 (uv can install the interpreter).
 - Docker with Compose, or an existing Lima instance with nerdctl Compose.
-- Free loopback ports 8000 (API), 55432 (PostgreSQL), and 56379 (optional Redis).
+- Free loopback ports 8000 (API), 55432 (PostgreSQL), and 56379 (critical Redis).
 
 The database password in Compose is explicitly local-development-only. Ports
 bind to loopback; do not expose this environment to a network or treat it as
@@ -33,7 +34,8 @@ The seed command creates a synthetic tenant, immutable free mock configuration v
 the `demo-count` schema, and a mode-0600 `.local/client-key`. A repeat invocation
 verifies the existing key without replacing it or printing it, and adds missing
 milestone 2 mock registry rows when upgrading an older local database. Readiness is 503
-until migrations and mock configuration exist; liveness does not probe storage.
+until migrations, mock configuration, and Redis are available; liveness does not
+probe storage. An absent or failed Redis control store rejects new execution.
 
 The smoke demo reports successful generate/extract request IDs without printing
 credentials. Open [API documentation](http://127.0.0.1:8000/docs) for published
@@ -71,7 +73,7 @@ Do not reuse a private key file from a different/cleared database: seed refuses
 to overwrite an existing invalid/revoked key. Choose a new file or restore the
 matching local database. Docker supports the same port environment variables on
 the host. `GATEWAY_HTTP_PORT`/`GATEWAY_SMOKE_URL` configure the API port/client URL;
-`GATEWAY_REDIS_PORT` controls the optional Redis host port.
+`GATEWAY_REDIS_PORT` controls the critical Redis host port.
 
 ## Run the API directly on the host
 
@@ -82,6 +84,7 @@ docker compose up -d postgres redis
 uv run gateway wait-database --timeout 30
 uv run alembic upgrade head
 uv run gateway seed-local
+export GATEWAY_REDIS_URL='redis://127.0.0.1:56379'
 uv run uvicorn app.main:create_app --factory --host 127.0.0.1 --port 8000 --no-access-log
 ```
 
@@ -161,6 +164,28 @@ A disabled mock yields `NO_ELIGIBLE_MODEL` without a new mock call. See the
 [routing verification](milestone-2-verification.md) and
 [provider matrix](provider-selection.md) for payload shape and limits.
 
+Policies publish `attempt_limit` (1–4) and `fallback_enabled`. The seeded v2
+policy retains one attempt; to exercise retries, publish and activate a new
+validated policy with `attempt_limit` up to 4. At most two retries per candidate
+and four provider invocations total can occur, all within one deadline and the
+original request ceiling. The HTTP path still dispatches only the offline mock.
+Redis enforces shared tenant/provider rate and concurrency limits and circuits;
+readiness exposes sanitized mock circuit state/count. A Redis outage fails closed
+for new execution, not merely as an optional cache degradation.
+
+Keyed requests need `GATEWAY_REPLAY_ENCRYPTION_KEY`: a stable, externally held,
+base64-encoded 32-byte random key. Omit it to disable keyed execution explicitly
+with a 503 response; never commit or log it. Supply it through your secret store
+or local shell environment before starting the container/host process. Do not
+rotate it while 24-hour replay records may still be used: changing it makes
+their identity/content inaccessible and could allow a new execution for the
+same literal key. Same-tenant endpoint/key/fingerprint repeats replay an encrypted
+terminal result under a new ingress ID with `original_request_id`; conflicts
+return 409, in-progress owners return 409 plus `Retry-After`, and uncertain
+execution remains blocked. Replay reports zero fresh provider usage and points
+to original evidence. A later retention job will purge expired protected bytes;
+expiry already prevents replay. See [reliability verification](milestone-3-verification.md).
+
 Request evidence includes status/identity/policy/routing/error metadata, never raw input
 or output. Keys are verification hashes in PostgreSQL. Input hashes use a keyed
 HMAC; set a private `GATEWAY_INPUT_HASH_KEY` for stable hashes across restarts,
@@ -168,7 +193,7 @@ otherwise an ephemeral key is generated for each process.
 
 ## Tests and quality checks
 
-With PostgreSQL running:
+With PostgreSQL and Redis running:
 
 ```sh
 uv run ruff format --check app migrations tests deploy
@@ -178,8 +203,9 @@ uv run pytest
 openspec validate build-llm-reliability-gateway --strict --no-interactive
 ```
 
-The full suite fails visibly when PostgreSQL is unavailable; required integration
+The full suite fails visibly when PostgreSQL or Redis is unavailable; required integration
 tests are not silently skipped. `TEST_DATABASE_URL` overrides its connection.
+`TEST_REDIS_URL` overrides the local Redis integration endpoint.
 Each integration test migrates a newly created random schema and deletes only
 that schema; it never truncates/drops the developer's public tables. The database
 user therefore needs local schema-creation privileges.
@@ -201,8 +227,8 @@ Actions run is claimed by local verification.
 Supported faults include `timeout`, `connection`, `rate_limit`, `server`,
 `credential`, `invalid_request`, `malformed`, `schema_invalid`, `refusal`,
 `truncation`, and `missing_usage`. Set it when starting/recreating the gateway.
-The current service makes one attempt and returns a typed failure; retries/fallback belong
-to milestone 3. The smoke script expects `success`, so use the API/tests to inspect
+The seeded policy makes one attempt; a versioned policy can enable bounded retry
+and fallback. The smoke script expects `success`, so use the API/tests to inspect
 faults and restore the default afterward.
 
 Stop containers while retaining local data:
@@ -220,19 +246,18 @@ is deliberately disabled; future schema changes need forward migrations.
 
 OpenAI and Anthropic adapters and deterministic ranking have offline contract
 tests, but the HTTP runtime cannot dispatch them. Their conservative token
-bounds remain unavailable, so strict-budget selection excludes them. There are
-no automatic retries/fallback, shared rate/concurrency
-controls/circuits, encrypted idempotency replay, cache, spend reservations,
-evaluation runner, metrics/tracing pipeline, or cloud deployment.
-Cache modes other than bypass and supplied idempotency keys return
-`INVALID_REQUEST` rather than silently pretending to enforce them. The schema
-includes their future wire fields, but execution remains gated to later milestones.
-An individual mock call has a timeout; full deadline/cancellation/recovery controls
-and spend enforcement are not yet a production guarantee. Redis remains optional;
-its outage degrades readiness metadata without blocking mock work.
+bounds remain unavailable, so strict-budget selection excludes them. There is
+no exact cache, atomic spend reservation, evaluation runner,
+metrics/tracing pipeline, or cloud deployment. Cache modes other than bypass
+return `INVALID_REQUEST`; keyed requests without a stable replay key fail closed.
+Deadline/cancellation/recovery controls have offline fault evidence, not a
+production network/billing guarantee. Redis is correctness-critical for new
+dispatch and readiness, not an optional optimization.
 
 Raw prompts/outputs are not stored or logged by the application. Usage is linked
 to request/attempt/pricing records before success is returned. A failed terminal
 write leaves dispatch intent unresolved and returns a non-retryable error;
-uncertain-state recovery is later work. This is an offline foundation/routing demo, not a
-production-ready gateway or a benchmark achievement.
+uncertain keyed state cannot be redispatched automatically. Crash recovery
+records an unknown attempt and conservative upper liability; full budget holds
+and reconciliation belong to milestone 4. This is an offline reliability demo,
+not a production-ready gateway or a benchmark achievement.

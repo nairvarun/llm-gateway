@@ -1,4 +1,4 @@
-name: Foundation checks
+name: Offline gateway checks
 
 on:
   push:
@@ -8,7 +8,7 @@ permissions:
   contents: read
 
 jobs:
-  offline-foundation:
+  offline-gateway:
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -21,6 +21,13 @@ jobs:
           - 55432:5432
         options: >-
           --health-cmd "pg_isready -U gateway -d gateway"
+          --health-interval 2s --health-timeout 2s --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 56379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
           --health-interval 2s --health-timeout 2s --health-retries 20
     steps:
       - uses: actions/checkout@v4

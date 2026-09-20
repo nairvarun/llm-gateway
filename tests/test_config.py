@@ -16,3 +16,8 @@ def test_live_provider_configuration_is_rejected(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setenv("GATEWAY_PROVIDER", "live")
     with pytest.raises(ValueError):
         load_settings()
+
+
+def test_empty_optional_replay_key_is_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GATEWAY_REPLAY_ENCRYPTION_KEY", "")
+    assert load_settings().replay_encryption_key is None

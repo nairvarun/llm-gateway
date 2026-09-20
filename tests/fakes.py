@@ -1,4 +1,6 @@
+import asyncio
 from dataclasses import replace
+from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID, uuid4
 
@@ -6,6 +8,7 @@ from app.domain.models import (
     Dispatch,
     ExecutionSnapshot,
     FinishReason,
+    IdempotencyClaim,
     JSONSchema,
     JSONValue,
     Principal,
@@ -35,6 +38,13 @@ class MemoryStore:
         self.fail_finish = False
         self.records: dict[UUID, RequestEvidence] = {}
         self.usages: dict[UUID, TokenUsage] = {}
+        self.attempts: dict[UUID, list[Dispatch]] = {}
+        self.attempt_outcomes: dict[UUID, tuple[str, str | None, Decimal]] = {}
+        self.keyed: dict[
+            tuple[UUID, str, str], tuple[str, UUID, str, bytes | None, datetime, datetime]
+        ] = {}
+        self.keyed_ingress: dict[UUID, tuple[UUID, str]] = {}
+        self.keyed_lock = asyncio.Lock()
         model = ModelSnapshot(
             uuid4(),
             "v2",
@@ -80,6 +90,91 @@ class MemoryStore:
         if not self.available:
             raise StateUnavailable()
         return self.principal if key_hash == hash_api_key(self.key) else None
+
+    async def claim_idempotency(
+        self,
+        principal: Principal,
+        endpoint: str,
+        key_hash: str,
+        fingerprint: str,
+        ingress_id: UUID,
+        expires_at: datetime,
+        owner_expires_at: datetime,
+    ) -> IdempotencyClaim:
+        if not self.available:
+            raise StateUnavailable()
+        identity = (principal.tenant_id, endpoint, key_hash)
+        async with self.keyed_lock:
+            existing = self.keyed.get(identity)
+            now = datetime.now(UTC)
+            if existing is None or existing[4] <= now:
+                self.keyed[identity] = (
+                    fingerprint,
+                    ingress_id,
+                    "in_progress",
+                    None,
+                    expires_at,
+                    owner_expires_at,
+                )
+                return IdempotencyClaim("owned", ingress_id)
+            prior_fingerprint, original, status, encrypted, _, owner_expiry = existing
+            if fingerprint != prior_fingerprint:
+                outcome = "conflict"
+            elif status == "in_progress" and owner_expiry <= now:
+                outcome = "uncertain"
+                self.keyed[identity] = (
+                    prior_fingerprint,
+                    original,
+                    outcome,
+                    encrypted,
+                    existing[4],
+                    owner_expiry,
+                )
+                if original in self.records and self.records[original].status == "in_progress":
+                    self.records[original] = replace(
+                        self.records[original], status="uncertain", error_code="EXECUTION_UNCERTAIN"
+                    )
+            elif status == "in_progress":
+                outcome = "in_progress"
+            elif status in {"completed", "failed"} and encrypted is not None:
+                outcome = "replay"
+            else:
+                outcome = "uncertain"
+            self.keyed_ingress[ingress_id] = (original, outcome)
+            return IdempotencyClaim(outcome, original, encrypted)
+
+    async def seal_idempotency(
+        self,
+        tenant_id: UUID,
+        endpoint: str,
+        key_hash: str,
+        original_request_id: UUID,
+        status: str,
+        encrypted_result: bytes,
+    ) -> None:
+        if self.fail_finish:
+            raise StateUnavailable()
+        identity = (tenant_id, endpoint, key_hash)
+        async with self.keyed_lock:
+            fingerprint, original, previous, _, expires, owner_expires = self.keyed[identity]
+            if original != original_request_id or previous != "in_progress":
+                raise StateUnavailable()
+            if self.records[original].status != status:
+                raise StateUnavailable()
+            self.keyed[identity] = (
+                fingerprint,
+                original,
+                status,
+                encrypted_result,
+                expires,
+                owner_expires,
+            )
+
+    async def mark_idempotency_uncertain(self, original_request_id: UUID) -> None:
+        async with self.keyed_lock:
+            for identity, row in self.keyed.items():
+                if row[1] == original_request_id and row[2] == "in_progress":
+                    self.keyed[identity] = (*row[:2], "uncertain", *row[3:])
 
     async def ready(self) -> bool:
         return self.available
@@ -134,7 +229,41 @@ class MemoryStore:
             None,
             snapshot.routing_evidence,
         )
-        return Dispatch(request_id, uuid4())
+        dispatch = Dispatch(request_id, uuid4())
+        self.attempts[request_id] = [dispatch]
+        return dispatch
+
+    async def add_attempt(
+        self, request_id: UUID, number: int, snapshot: ExecutionSnapshot
+    ) -> Dispatch:
+        if self.fail_begin:
+            raise StateUnavailable()
+        if number != len(self.attempts[request_id]) + 1:
+            raise ValueError("Attempt number is not sequential")
+        dispatch = Dispatch(request_id, uuid4())
+        self.attempts[request_id].append(dispatch)
+        return dispatch
+
+    async def settle_attempt(
+        self,
+        dispatch: Dispatch,
+        status: str,
+        finish_reason: FinishReason | None,
+        usage: TokenUsage,
+        cost: Decimal,
+        error_class: str | None,
+    ) -> None:
+        if self.fail_finish:
+            raise StateUnavailable()
+        self.usages[dispatch.attempt_id] = usage
+        self.attempt_outcomes[dispatch.attempt_id] = (status, error_class, cost)
+
+    async def complete_request(self, request_id: UUID, status: str, error_code: str | None) -> None:
+        if self.fail_finish:
+            raise StateUnavailable()
+        self.records[request_id] = replace(
+            self.records[request_id], status=status, error_code=error_code
+        )
 
     async def reject_routing(
         self,
@@ -146,6 +275,7 @@ class MemoryStore:
         policy_id: UUID,
         policy_version: str,
         routing_evidence: dict[str, JSONValue],
+        error_code: str = "NO_ELIGIBLE_MODEL",
     ) -> None:
         if self.fail_begin:
             raise StateUnavailable()
@@ -155,7 +285,7 @@ class MemoryStore:
             principal.application_id,
             "failed",
             policy_version,
-            "NO_ELIGIBLE_MODEL",
+            error_code,
             routing_evidence,
         )
 

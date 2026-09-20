@@ -1,8 +1,8 @@
 ## Implementation status
 
-Milestone 1's offline foundation is implemented and locally verified. See
-[the evidence report](../../../docs/milestone-1-verification.md) and `tasks.md`.
-Milestones 2–6 remain planned; this active change is not a completed baseline.
+Milestones 1–3 are implemented and locally verified in offline mode. See
+[the latest evidence report](../../../docs/milestone-3-verification.md) and `tasks.md`.
+Milestones 4–6 remain planned; this active change is not a completed baseline.
 
 ## Why
 
@@ -22,7 +22,7 @@ the informal handoff needs a testable contract before implementation begins.
 - Add versioned evaluation datasets, task-specific scores, promotion gates,
   reproducible local deployment, and a gated AWS staging deployment.
 - Deliver through milestone gates rather than presenting the whole platform as
-  an MVP. Only the offline foundation is implemented at this point.
+  an MVP. The first three offline milestones are implemented; live dispatch remains gated.
 
 ## Capabilities
 

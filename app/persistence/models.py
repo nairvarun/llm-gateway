@@ -99,6 +99,7 @@ class Attempt(Base):
     model: Mapped[str] = mapped_column(String(100))
     model_id: Mapped[UUID] = mapped_column(ForeignKey("configuration_versions.id"))
     pricing_id: Mapped[UUID] = mapped_column(ForeignKey("configuration_versions.id"))
+    reserved_upper_cost_usd: Mapped[Decimal] = mapped_column(Numeric(20, 10), default=0)
     outcome: Mapped[str] = mapped_column(String(16), default="dispatched")
     finish_reason: Mapped[str | None] = mapped_column(String(16))
     error_class: Mapped[str | None] = mapped_column(String(50))
@@ -122,6 +123,34 @@ class UsageEvent(Base):
     output_tokens: Mapped[int | None]
     usage_status: Mapped[str] = mapped_column(String(16))
     estimated_cost_usd: Mapped[Decimal] = mapped_column(Numeric(20, 10))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class IdempotencyRecord(Base):
+    __tablename__ = "idempotency_records"
+    __table_args__ = (
+        CheckConstraint("status IN ('in_progress', 'completed', 'failed', 'uncertain')"),
+    )
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id"), primary_key=True)
+    endpoint: Mapped[str] = mapped_column(String(50), primary_key=True)
+    key_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    fingerprint: Mapped[str] = mapped_column(String(64))
+    original_request_id: Mapped[UUID] = mapped_column(index=True)
+    status: Mapped[str] = mapped_column(String(16))
+    encrypted_result: Mapped[bytes | None]
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    owner_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class IdempotencyIngress(Base):
+    __tablename__ = "idempotency_ingress"
+    ingress_request_id: Mapped[UUID] = mapped_column(primary_key=True)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id"))
+    endpoint: Mapped[str] = mapped_column(String(50))
+    original_request_id: Mapped[UUID]
+    outcome: Mapped[str] = mapped_column(String(32))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

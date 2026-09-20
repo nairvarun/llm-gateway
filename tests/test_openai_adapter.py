@@ -91,6 +91,7 @@ async def test_openai_normalizes_other_success_shapes(
         (403, FailureKind.CREDENTIAL),
         (429, FailureKind.RATE_LIMIT),
         (500, FailureKind.SERVER),
+        (501, FailureKind.SERVER_PERMANENT),
         (503, FailureKind.SERVER),
     ],
 )
@@ -105,6 +106,7 @@ async def test_openai_classifies_http_faults_without_sdk_retries(
         return httpx2.Response(
             status,
             json={"error": {"message": "synthetic secret-like wire detail", "type": "error"}},
+            headers={"retry-after": "2.5"} if status == 429 else {},
         )
 
     async with httpx2.AsyncClient(transport=httpx2.MockTransport(handler)) as transport:
@@ -113,6 +115,7 @@ async def test_openai_classifies_http_faults_without_sdk_retries(
             await OpenAIProvider(client).invoke(ProviderInput("Synthetic request"))
     assert count == 1
     assert caught.value.kind is kind
+    assert caught.value.retry_after_seconds == (2.5 if status == 429 else None)
     assert "secret-like" not in str(caught.value)
 
 
@@ -148,6 +151,7 @@ async def test_openai_extraction_payload_is_bounded_and_untrusted() -> None:
     def handler(request: httpx2.Request) -> httpx2.Response:
         wire = json.loads(request.content)
         assert "schema" in wire["instructions"]
+        assert "Prior output failed local validation" in wire["instructions"]
         assert wire["max_output_tokens"] == 32
         assert wire["temperature"] == 0
         return httpx2.Response(200, json=payload)
@@ -155,7 +159,12 @@ async def test_openai_extraction_payload_is_bounded_and_untrusted() -> None:
     async with httpx2.AsyncClient(transport=httpx2.MockTransport(handler)) as transport:
         client = openai.AsyncOpenAI(api_key="synthetic-only", http_client=transport)
         result = await OpenAIProvider(client).invoke(
-            ProviderInput("Synthetic request", schema={"type": "object"}, max_output_tokens=32)
+            ProviderInput(
+                "Synthetic request",
+                schema={"type": "object"},
+                max_output_tokens=32,
+                validation_retry=True,
+            )
         )
     assert result.output == "{invalid JSON"
     # Local schema validation in GatewayService decides whether it can succeed.

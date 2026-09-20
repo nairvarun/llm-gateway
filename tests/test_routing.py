@@ -125,6 +125,7 @@ def test_unavailable_bound_rejected_before_spend_dispatch() -> None:
         ({"max_cost_usd": Decimal("0.000001")}, "spend_allowance"),
         ({"text": "x" * 10_000}, "context_limit"),
         ({"quality_tier": "not-allowed"}, "quality_tier"),
+        ({"available_adapters": frozenset()}, "adapter_unavailable"),
     ],
 )
 def test_constraint_exclusions(change: dict[str, object], reason: str) -> None:

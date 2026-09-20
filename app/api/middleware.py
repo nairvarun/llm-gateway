@@ -1,3 +1,4 @@
+import asyncio
 from time import monotonic
 from uuid import uuid4
 
@@ -48,12 +49,43 @@ class RequestBoundary:
             if not message.get("more_body", False):
                 break
         delivered = False
+        disconnected = asyncio.Event()
 
         async def replay() -> Message:
             nonlocal delivered
             if not delivered:
                 delivered = True
                 return {"type": "http.request", "body": bytes(body), "more_body": False}
-            return await receive()
+            await disconnected.wait()
+            return {"type": "http.disconnect"}
 
-        await self.app(scope, replay, correlated)
+        async def execute_app() -> None:
+            await self.app(scope, replay, correlated)
+
+        execution = asyncio.create_task(execute_app())
+
+        async def watch_disconnect() -> None:
+            while True:
+                message = await receive()
+                if message["type"] == "http.disconnect":
+                    disconnected.set()
+                    execution.cancel()
+                    return
+
+        watcher = asyncio.create_task(watch_disconnect())
+        try:
+            done, _ = await asyncio.wait({execution, watcher}, return_when=asyncio.FIRST_COMPLETED)
+            if watcher in done:
+                await watcher
+                try:
+                    await execution
+                except asyncio.CancelledError:
+                    pass
+            else:
+                await execution
+        finally:
+            watcher.cancel()
+            try:
+                await watcher
+            except asyncio.CancelledError:
+                pass

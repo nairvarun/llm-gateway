@@ -7,13 +7,15 @@ service for generation, structured extraction, reliability, spend accounting,
 and evaluation. It originated in the ChatGPT project “Gul Resume”; that is
 provenance, not an instruction to edit a resume in this repository.
 
-Milestones 1–2 are implemented offline: mock generation/extraction, schema
+Milestones 1–3 are implemented offline: mock generation/extraction, schema
 validation, PostgreSQL records, authentication, fixture-tested OpenAI/Anthropic
-adapters, versioned routing, audited operator controls, and local containers.
-Read `docs/quickstart.md` and `docs/milestone-2-verification.md` for runnable checks
-and boundaries. Live adapter dispatch remains disabled until reliability/budget
-gates are complete; do not describe later controls, infrastructure, or performance
-targets as working or verified. The resume
+adapters, versioned routing, audited operator controls, bounded fault execution,
+shared Redis controls, encrypted keyed replay, and local containers. Read
+`docs/quickstart.md` and `docs/milestone-3-verification.md` for runnable checks
+and boundaries. Redis is critical to runtime admission; keyed replay requires a
+stable externally supplied secret. Live adapter dispatch remains disabled until
+atomic budget/cache/privacy gates are complete. Do not describe later controls,
+infrastructure, or performance targets as working or verified. The resume
 mentioned in the old instructions is not present; do not invent its contents.
 
 ## Read first and resolve conflicts
@@ -83,8 +85,9 @@ historical example or a benchmark target.
 
 Run `uv run ruff format --check app migrations tests deploy`,
 `uv run ruff check app migrations tests deploy`, `uv run mypy`, and `uv run pytest`.
-The full suite requires PostgreSQL and fails loudly when it is absent. Integration
-tests create/drop only their own random schemas; do not point them at production.
+The full suite requires PostgreSQL and Redis and fails loudly when either is absent.
+Integration tests create/drop only their own random PostgreSQL schemas and
+namespace-isolated Redis keys; do not point them at production.
 Use the quickstart smoke demo to verify the container. Also validate OpenSpec,
 documentation links, and preservation of references; use additional fault,
 security, and load checks proportionate to the change. Do not report commands as passing unless

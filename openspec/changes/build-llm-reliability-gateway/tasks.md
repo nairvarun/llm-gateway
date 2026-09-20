@@ -30,14 +30,14 @@ Coverage: `provider-routing` and pricing provenance in `usage-budgets`.
 
 Coverage: `request-reliability` and failure contracts in `gateway-api`.
 
-- [ ] 3.1 Implement one monotonic deadline, attempt timeouts, and recording margin with an injectable clock; verify no attempt/backoff starts beyond bounds and published scheduler-tolerance tests pass.
-- [ ] 3.2 Implement classified retry, bounded jitter/Retry-After, total attempt caps, and ordered fallback; verify scripted 429/5xx/timeouts recover only within constraints and permanent invalid requests do not retry/fallback.
-- [ ] 3.3 Implement separately classified schema-validation recovery/refusal behavior; verify valid recovery and exhausted deadline/attempt/spend failures use the documented error precedence.
-- [ ] 3.4 Implement shared Redis circuit states and fenced half-open probes; verify open/half-open/closed transitions and probe limits across two simulated replicas.
-- [ ] 3.5 Implement shared tenant/provider rate/concurrency admission; verify saturation, lease recovery, deadline-bounded waiting, and fail-closed control-store outages.
-- [ ] 3.6 Add durable idempotency ownership/fingerprints and encrypted replay content; verify completed/failed replay, changed-input conflict, identical-concurrent ownership, retention expiry, and cross-tenant key isolation.
-- [ ] 3.7 Implement disconnect/crash detection and uncertain-key recovery; verify no redispatch on expired leases, preserved dispatch evidence, and separately identified ingress versus original execution.
-- [ ] 3.8 Add an integration fault matrix for timeouts, 429, selected 5xx, invalid output, provider disablement/outage, and critical-write failure; verify bounded behavior and record the evidence report.
+- [x] 3.1 Implement one monotonic deadline, attempt timeouts, and recording margin with an injectable clock; verify no attempt/backoff starts beyond bounds and published scheduler-tolerance tests pass.
+- [x] 3.2 Implement classified retry, bounded jitter/Retry-After, total attempt caps, and ordered fallback; verify scripted 429/5xx/timeouts recover only within constraints and permanent invalid requests do not retry/fallback.
+- [x] 3.3 Implement separately classified schema-validation recovery/refusal behavior; verify valid recovery and exhausted deadline/attempt/spend failures use the documented error precedence.
+- [x] 3.4 Implement shared Redis circuit states and fenced half-open probes; verify open/half-open/closed transitions and probe limits across two simulated replicas.
+- [x] 3.5 Implement shared tenant/provider rate/concurrency admission; verify saturation, lease recovery, deadline-bounded waiting, and fail-closed control-store outages.
+- [x] 3.6 Add durable idempotency ownership/fingerprints and encrypted replay content; verify completed/failed replay, changed-input conflict, identical-concurrent ownership, retention expiry, and cross-tenant key isolation.
+- [x] 3.7 Implement disconnect/crash detection and uncertain-key recovery; verify no redispatch on expired leases, preserved dispatch evidence, and separately identified ingress versus original execution.
+- [x] 3.8 Add an integration fault matrix for timeouts, 429, selected 5xx, invalid output, provider disablement/outage, and critical-write failure; verify bounded behavior and record the evidence report.
 
 ## 4. Exact cache and budgets — concurrent correctness
 

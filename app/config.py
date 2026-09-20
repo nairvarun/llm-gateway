@@ -17,6 +17,14 @@ class Settings(BaseSettings):
     )
     database_schema: str = Field(default="public", pattern=r"^[a-z][a-z0-9_]{0,62}$")
     redis_url: SecretStr | None = None
+    tenant_concurrency: int = Field(default=8, ge=1, le=1000)
+    provider_concurrency: int = Field(default=16, ge=1, le=1000)
+    tenant_rate_per_minute: int = Field(default=60, ge=1, le=100_000)
+    provider_rate_per_minute: int = Field(default=300, ge=1, le=100_000)
+    circuit_failure_threshold: int = Field(default=5, ge=1, le=1000)
+    circuit_window_seconds: int = Field(default=60, ge=1, le=3600)
+    circuit_cooldown_seconds: int = Field(default=30, ge=1, le=3600)
+    circuit_probe_lease_seconds: int = Field(default=30, ge=1, le=3600)
     mock_scenario: str = "success"
     body_limit_bytes: int = Field(default=262_144, ge=1024, le=262_144)
     input_limit_chars: int = Field(default=100_000, ge=1, le=100_000)
@@ -24,6 +32,12 @@ class Settings(BaseSettings):
     schema_max_depth: int = Field(default=16, ge=1, le=16)
     default_request_cost_usd: Decimal = Field(default=Decimal("1"), gt=0)
     input_hash_key: SecretStr = Field(default_factory=lambda: SecretStr(secrets.token_hex(32)))
+    replay_encryption_key: SecretStr | None = None
+
+    @field_validator("replay_encryption_key", mode="before")
+    @classmethod
+    def empty_replay_key_disabled(cls, value: object) -> object:
+        return None if value == "" else value
 
     @field_validator("database_url")
     @classmethod

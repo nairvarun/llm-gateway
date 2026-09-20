@@ -1,12 +1,13 @@
-import asyncio
 import hashlib
 import hmac
+from collections.abc import Mapping
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from time import monotonic
+from random import Random
 from typing import cast
 from uuid import UUID
 
-from app.api.schema_validation import validate_output, validate_schema
+from app.api.schema_validation import validate_schema
 from app.api.schemas import (
     ExtractRequest,
     ExtractResponse,
@@ -15,27 +16,38 @@ from app.api.schemas import (
     UsageResponse,
 )
 from app.config import Settings
+from app.domain.control import Control
+from app.domain.deadline import Clock, Deadline, SystemClock
 from app.domain.errors import GatewayError
-from app.domain.models import (
-    ExecutionSnapshot,
-    FailureKind,
-    FinishReason,
-    JSONSchema,
-    JSONValue,
-    Principal,
-    Provider,
-    ProviderFailure,
-    ProviderInput,
-    StateUnavailable,
-    Store,
-    TokenUsage,
-)
-from app.domain.routing import RoutingInput, maximum_cost, rank_candidates, sanitized_evidence
+from app.domain.models import JSONSchema, JSONValue, Principal, Provider, Store
+from app.domain.routing import RoutingInput, rank_candidates, sanitized_evidence
+from app.execution import AttemptExecutor
+from app.security.replay import ReplayCipher
 
 
 class GatewayService:
-    def __init__(self, settings: Settings, store: Store, provider: Provider) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        store: Store,
+        provider: Provider,
+        clock: Clock | None = None,
+        providers: Mapping[tuple[str, str], Provider] | None = None,
+        random: Random | None = None,
+        control: Control | None = None,
+    ) -> None:
         self.settings, self.store, self.provider = settings, store, provider
+        self.clock = clock or SystemClock()
+        self.providers = {
+            (provider.capabilities.provider, provider.capabilities.model): provider,
+            **(providers or {}),
+        }
+        self.executor = AttemptExecutor(store, self.providers, random, control)
+        self.replay_cipher = (
+            ReplayCipher(settings.replay_encryption_key.get_secret_value())
+            if settings.replay_encryption_key is not None
+            else None
+        )
 
     async def execute(
         self,
@@ -44,12 +56,13 @@ class GatewayService:
         request_id: UUID,
         started: float,
     ) -> GenerateResponse | ExtractResponse:
+        deadline = Deadline(self.clock, started, request.latency_budget_ms)
         if len(request.input) > self.settings.input_limit_chars:
             raise GatewayError("INVALID_REQUEST", "Input exceeds the configured limit.", 422)
         # Never silently accept an unimplemented safety-affecting feature.
-        if request.cache_mode != "bypass" or request.idempotency_key is not None:
+        if request.cache_mode != "bypass":
             raise GatewayError(
-                "INVALID_REQUEST", "Cache/idempotency execution is not available yet.", 422
+                "INVALID_REQUEST", "Exact cache execution is not available yet.", 422
             )
         if request.model_policy not in {"mock", "mock-v1", "mock@v1"}:
             raise GatewayError(
@@ -68,8 +81,11 @@ class GatewayService:
                     raise GatewayError(
                         "INVALID_SCHEMA", "A schema name requires an explicit version.", 422
                     )
-                schema = await self.store.schema(
-                    principal, request.schema_name, request.schema_version
+                schema = await deadline.run(
+                    lambda: self.store.schema(
+                        principal, cast(str, request.schema_name), cast(str, request.schema_version)
+                    ),
+                    reserve_recording=True,
                 )
                 if schema is None:
                     raise GatewayError(
@@ -91,7 +107,21 @@ class GatewayService:
             hashlib.sha256,
         ).hexdigest()
         endpoint = "/v1/extract" if schema is not None else "/v1/generate"
-        registry = await self.store.registry()
+        if request.idempotency_key is not None:
+            return await self._keyed(
+                request, principal, request_id, started, deadline, endpoint, schema
+            )
+        effective_ceiling = min(
+            self.settings.default_request_cost_usd,
+            request.max_cost_usd or self.settings.default_request_cost_usd,
+        )
+        registry = await deadline.run(self.store.registry, reserve_recording=True)
+        control = self.executor.control
+        health = (
+            await deadline.run(lambda: control.health("mock"), reserve_recording=True)
+            if control is not None
+            else Decimal("1")
+        )
         decision = rank_candidates(
             registry,
             RoutingInput(
@@ -102,170 +132,202 @@ class GatewayService:
                 schema=cast(dict[str, object] | None, schema),
                 max_output_tokens=request.max_output_tokens,
                 remaining_deadline_ms=max(
-                    0, request.latency_budget_ms - int((monotonic() - started) * 1000)
+                    0, int(deadline.remaining(reserve_recording=True) * 1000)
                 ),
-                max_cost_usd=request.max_cost_usd,
-                # Milestone 2 has no shared circuit-health implementation yet.
+                max_cost_usd=effective_ceiling,
                 # Only the offline mock can be dispatched by this service.
-                health={"mock": Decimal("1")},
+                health={"mock": health},
+                available_adapters=frozenset(key for key in self.providers if key[0] == "mock"),
             ),
         )
         evidence = cast(dict[str, JSONValue], sanitized_evidence(registry, decision))
+        evidence["health_snapshot"] = {"mock": str(health)}
         if decision.selected is None or decision.selected.payload.provider != "mock":
             reasons = sorted({reason for item in decision.ranked for reason in item.reasons})
             if decision.selected is not None:
                 evidence["dispatch_exclusion"] = "live_dispatch_gated"
                 reasons.append("live_dispatch_gated")
-            await self.store.reject_routing(
-                principal,
-                request_id,
-                endpoint,
-                input_hash,
-                schema_hash,
-                registry.policy_id,
-                registry.policy_version,
-                evidence,
+            circuit_open = set(reasons) == {"unhealthy"} and health == 0
+            error_code = "CIRCUIT_OPEN" if circuit_open else "NO_ELIGIBLE_MODEL"
+            await deadline.run(
+                lambda: self.store.reject_routing(
+                    principal,
+                    request_id,
+                    endpoint,
+                    input_hash,
+                    schema_hash,
+                    registry.policy_id,
+                    registry.policy_version,
+                    evidence,
+                    error_code,
+                ),
             )
             raise GatewayError(
-                "NO_ELIGIBLE_MODEL",
+                error_code,
                 "No eligible offline model: " + ", ".join(reasons or ["unavailable"]),
                 503,
             )
-        selected = decision.selected
-        snapshot = ExecutionSnapshot(
-            registry.policy_id,
-            registry.policy_version,
-            selected.id,
-            selected.pricing_id,
-            selected.pricing_version,
-            selected.pricing.input_per_million,
-            selected.pricing.output_per_million,
-            selected.payload.provider,
-            selected.payload.model,
-            evidence,
-        )
-        dispatch = await self.store.begin(
+        outcome = await self.executor.run(
             principal,
             request_id,
             endpoint,
             input_hash,
             schema_hash,
-            snapshot,
+            request.model_copy(update={"max_cost_usd": effective_ceiling}),
+            schema,
+            registry,
+            decision,
+            evidence,
+            deadline,
         )
-        usage = TokenUsage(None, None, "unknown")
-        selected_evidence = next(item for item in decision.ranked if item.eligible)
-        upper_cost = selected_evidence.estimated_max_cost_usd or Decimal("0")
-        recorded_cost = upper_cost
-        finish_reason: FinishReason | None = None
-        error_class: str | None = None
-        failure: GatewayError | None = None
-        output: JSONValue = None
-        result_provider, result_model = "mock", "mock-text-v1"
-        try:
-            if not await self.store.provider_enabled(snapshot.provider):
-                recorded_cost = Decimal("0")
-                raise GatewayError(
-                    "NO_ELIGIBLE_MODEL", "Provider was disabled before dispatch.", 503
-                )
-            remaining = request.latency_budget_ms / 1000 - (monotonic() - started)
-            if remaining <= 0:
-                recorded_cost = Decimal("0")
-                raise TimeoutError()
-            result = await asyncio.wait_for(
-                self.provider.invoke(
-                    ProviderInput(
-                        request.input,
-                        request.task_type,
-                        schema,
-                        request.temperature,
-                        request.max_output_tokens,
-                    )
-                ),
-                remaining,
-            )
-            usage, finish_reason = result.usage, result.finish_reason
-            if usage.input_tokens is not None and usage.output_tokens is not None:
-                recorded_cost = maximum_cost(
-                    selected.pricing, usage.input_tokens, usage.output_tokens
-                )
-            result_provider, result_model = result.provider, result.model
-            output = result.output
-            if schema is not None:
-                if finish_reason in {FinishReason.LENGTH, FinishReason.REFUSAL}:
-                    raise GatewayError(
-                        "OUTPUT_VALIDATION_FAILED", "Extraction was truncated or refused.", 502
-                    )
-                output = validate_output(result.output, schema)
-        except ProviderFailure as error:
-            usage, error_class = error.usage, error.kind.value
-            if usage.input_tokens is not None and usage.output_tokens is not None:
-                recorded_cost = maximum_cost(
-                    selected.pricing, usage.input_tokens, usage.output_tokens
-                )
-            if error.kind == FailureKind.INVALID_REQUEST:
-                failure = GatewayError(
-                    "UPSTREAM_REQUEST_REJECTED", "Provider rejected the request.", 502
-                )
-            else:
-                failure = GatewayError(
-                    "PROVIDER_UNAVAILABLE", "The mock provider could not complete the request.", 503
-                )
-        except TimeoutError:
-            error_class = "timeout"
-            failure = GatewayError("DEADLINE_EXCEEDED", "Request deadline expired.", 504)
-        except GatewayError as error:
-            error_class, failure = (
-                "provider_disabled" if error.code == "NO_ELIGIBLE_MODEL" else "output_validation",
-                error,
-            )
-        except asyncio.CancelledError:
-            await asyncio.shield(
-                self.store.finish(
-                    dispatch,
-                    "uncertain",
-                    finish_reason,
-                    usage,
-                    recorded_cost,
-                    "EXECUTION_UNCERTAIN",
-                    "cancelled",
-                )
-            )
-            raise
-        try:
-            await self.store.finish(
-                dispatch,
-                "failed" if failure else "completed",
-                finish_reason,
-                usage,
-                recorded_cost,
-                failure.code if failure else None,
-                error_class,
-            )
-        except StateUnavailable as error:
-            raise GatewayError(
-                "DEPENDENCY_UNAVAILABLE",
-                "Execution outcome could not be recorded; execution may have occurred.",
-                503,
-            ) from error
-        if failure:
-            raise failure
         common = {
             "request_id": request_id,
-            "provider": result_provider,
-            "model": result_model,
-            "finish_reason": finish_reason,
+            "provider": outcome.provider,
+            "model": outcome.model,
+            "finish_reason": outcome.finish_reason,
             "usage": UsageResponse(
-                input_tokens=usage.input_tokens,
-                output_tokens=usage.output_tokens,
-                status=usage.status,
-                complete=usage.input_tokens is not None and usage.output_tokens is not None,
-                attempt_count=1,
+                input_tokens=outcome.usage.input_tokens,
+                output_tokens=outcome.usage.output_tokens,
+                status=outcome.usage.status,
+                complete=outcome.usage.input_tokens is not None
+                and outcome.usage.output_tokens is not None,
+                attempt_count=outcome.attempt_count,
             ),
-            "estimated_cost_usd": recorded_cost,
-            "latency_ms": (monotonic() - started) * 1000,
-            "policy_version": snapshot.policy_version,
-            "routing": snapshot.routing_evidence,
+            "estimated_cost_usd": outcome.estimated_cost_usd,
+            "latency_ms": (self.clock.now() - started) * 1000,
+            "policy_version": registry.policy_version,
+            "routing": evidence,
+            "fallback_used": outcome.fallback_used,
         }
         if schema is not None:
-            return ExtractResponse.model_validate({**common, "output": output})
-        return GenerateResponse.model_validate({**common, "output": output})
+            return ExtractResponse.model_validate({**common, "output": outcome.output})
+        return GenerateResponse.model_validate({**common, "output": outcome.output})
+
+    async def _keyed(
+        self,
+        request: GenerateRequest,
+        principal: Principal,
+        request_id: UUID,
+        started: float,
+        deadline: Deadline,
+        endpoint: str,
+        schema: JSONSchema | None,
+    ) -> GenerateResponse | ExtractResponse:
+        cipher = self.replay_cipher
+        if cipher is None:
+            raise GatewayError(
+                "DEPENDENCY_UNAVAILABLE", "Keyed execution requires a configured replay key.", 503
+            )
+        assert request.idempotency_key is not None
+        key_hash = cipher.key_hash(principal.tenant_id, endpoint, request.idempotency_key)
+        fingerprint = cipher.fingerprint(principal, endpoint, request, schema)
+        now = datetime.now(UTC)
+        claim = await deadline.run(
+            lambda: self.store.claim_idempotency(
+                principal,
+                endpoint,
+                key_hash,
+                fingerprint,
+                request_id,
+                now + timedelta(hours=24),
+                now + timedelta(milliseconds=request.latency_budget_ms + 30_000),
+            ),
+            reserve_recording=True,
+        )
+        if claim.status == "conflict":
+            raise GatewayError("IDEMPOTENCY_CONFLICT", "Key was used with different inputs.", 409)
+        if claim.status == "in_progress":
+            raise GatewayError(
+                "REQUEST_IN_PROGRESS",
+                "Original execution is still in progress.",
+                409,
+                retryable=True,
+                original_request_id=claim.original_request_id,
+                retry_after_seconds=1,
+            )
+        if claim.status == "uncertain":
+            raise GatewayError(
+                "EXECUTION_UNCERTAIN",
+                "Original execution requires reconciliation.",
+                409,
+                original_request_id=claim.original_request_id,
+            )
+        if claim.status == "replay":
+            if claim.encrypted_result is None:
+                raise GatewayError("EXECUTION_UNCERTAIN", "Replay content is unavailable.", 409)
+            content = cipher.open(
+                principal.tenant_id,
+                endpoint,
+                key_hash,
+                claim.original_request_id,
+                claim.encrypted_result,
+            )
+            if content.get("kind") == "error":
+                raise GatewayError(
+                    str(content["code"]),
+                    str(content["message"]),
+                    int(content["status"]),
+                    original_request_id=claim.original_request_id,
+                )
+            if content.get("kind") != "success" or not isinstance(content.get("response"), dict):
+                raise GatewayError("EXECUTION_UNCERTAIN", "Replay content is unavailable.", 409)
+            source = dict(content["response"])
+            source["request_id"] = request_id
+            source["original_request_id"] = claim.original_request_id
+            source["idempotency_replayed"] = True
+            source["estimated_cost_usd"] = "0"
+            source["latency_ms"] = (self.clock.now() - started) * 1000
+            source["usage"] = {
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "status": "replay",
+                "complete": True,
+                "attempt_count": 0,
+                "source_request_id": claim.original_request_id,
+            }
+            if isinstance(request, ExtractRequest):
+                return ExtractResponse.model_validate(source)
+            return GenerateResponse.model_validate(source)
+        if claim.status != "owned":
+            raise GatewayError("EXECUTION_UNCERTAIN", "Keyed execution state is invalid.", 409)
+        try:
+            response = await self.execute(
+                request.model_copy(update={"idempotency_key": None}),
+                principal,
+                request_id,
+                started,
+            )
+        except GatewayError as error:
+            evidence = await deadline.run(lambda: self.store.evidence(principal, request_id))
+            if evidence is not None and evidence.status == "failed":
+                encrypted = cipher.seal(
+                    principal.tenant_id,
+                    endpoint,
+                    key_hash,
+                    request_id,
+                    {
+                        "kind": "error",
+                        "code": error.code,
+                        "message": error.message,
+                        "status": error.status,
+                    },
+                )
+                await deadline.run(
+                    lambda: self.store.seal_idempotency(
+                        principal.tenant_id, endpoint, key_hash, request_id, "failed", encrypted
+                    )
+                )
+            raise
+        encrypted = cipher.seal(
+            principal.tenant_id,
+            endpoint,
+            key_hash,
+            request_id,
+            {"kind": "success", "response": response.model_dump(mode="json")},
+        )
+        await deadline.run(
+            lambda: self.store.seal_idempotency(
+                principal.tenant_id, endpoint, key_hash, request_id, "completed", encrypted
+            )
+        )
+        return response

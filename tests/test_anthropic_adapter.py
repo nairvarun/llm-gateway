@@ -79,6 +79,7 @@ async def test_anthropic_normalizes_other_success_shapes(
         (403, FailureKind.CREDENTIAL),
         (429, FailureKind.RATE_LIMIT),
         (500, FailureKind.SERVER),
+        (501, FailureKind.SERVER_PERMANENT),
         (503, FailureKind.SERVER),
     ],
 )
@@ -96,6 +97,7 @@ async def test_anthropic_classifies_http_faults_without_sdk_retries(
                 "type": "error",
                 "error": {"type": "api_error", "message": "synthetic secret-like detail"},
             },
+            headers={"retry-after": "2.5"} if status == 429 else {},
         )
 
     async with httpx2.AsyncClient(transport=httpx2.MockTransport(handler)) as transport:
@@ -104,6 +106,7 @@ async def test_anthropic_classifies_http_faults_without_sdk_retries(
             await AnthropicProvider(client).invoke(ProviderInput("Synthetic request"))
     assert count == 1
     assert caught.value.kind is kind
+    assert caught.value.retry_after_seconds == (2.5 if status == 429 else None)
     assert "secret-like" not in str(caught.value)
 
 
@@ -139,12 +142,18 @@ async def test_anthropic_schema_is_prompted_and_invalid_json_stays_untrusted() -
     def handler(request: httpx2.Request) -> httpx2.Response:
         wire = json.loads(request.content)
         assert "schema" in wire["system"]
+        assert "Prior output failed local validation" in wire["system"]
         assert wire["max_tokens"] == 32
         return httpx2.Response(200, json=payload)
 
     async with httpx2.AsyncClient(transport=httpx2.MockTransport(handler)) as transport:
         client = anthropic.AsyncAnthropic(api_key="synthetic-only", http_client=transport)
         result = await AnthropicProvider(client).invoke(
-            ProviderInput("Synthetic request", schema={"type": "object"}, max_output_tokens=32)
+            ProviderInput(
+                "Synthetic request",
+                schema={"type": "object"},
+                max_output_tokens=32,
+                validation_retry=True,
+            )
         )
     assert result.output == "{invalid JSON"

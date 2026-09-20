@@ -53,6 +53,16 @@ async def test_generation_contract_and_derived_identity(
     assert body["usage"]["complete"] is True
 
 
+async def test_openapi_examples_are_executable_without_future_modes(
+    client: httpx.AsyncClient,
+) -> None:
+    schema = (await client.get("/openapi.json")).json()["components"]["schemas"]
+    assert schema["GenerateRequest"]["examples"] == [{"input": "synthetic demo"}]
+    assert schema["ExtractRequest"]["examples"] == [
+        {"input": '{"count": 2}', "schema_name": "demo-count", "schema_version": "v1"}
+    ]
+
+
 async def test_nonzero_mock_pricing_uses_decimal_observed_estimate(memory: MemoryStore) -> None:
     model = memory.routing.models[0]
     priced = replace(
@@ -72,6 +82,30 @@ async def test_nonzero_mock_pricing_uses_decimal_observed_estimate(memory: Memor
     assert body["usage"]["input_tokens"] == 1
     assert body["usage"]["output_tokens"] == 5
     assert body["estimated_cost_usd"] == "0.0000110000"
+
+
+async def test_registered_profile_without_adapter_never_invokes_mock(memory: MemoryStore) -> None:
+    model = memory.routing.models[0]
+    other = replace(model, payload=model.payload.model_copy(update={"model": "mock-other"}))
+    policy = memory.routing.policy.model_copy(
+        update={
+            "candidates": (
+                memory.routing.policy.candidates[0].model_copy(update={"name": "mock-other"}),
+            )
+        }
+    )
+    memory.routing = replace(memory.routing, policy=policy, models=(other,))
+    provider = MockProvider()
+    app = create_app(Settings(), store=memory, provider=provider)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app),
+        base_url="http://test",
+        headers={"X-API-Key": memory.key},
+    ) as client:
+        response = await client.post("/v1/generate", json={"input": "synthetic"})
+    assert response.status_code == 503
+    assert "adapter_unavailable" in response.json()["error"]["message"]
+    assert provider.invocations == 0
 
 
 @pytest.mark.parametrize("headers", [{"X-API-Key": "wrong"}, {"X-API-Key": ""}])
@@ -110,12 +144,21 @@ async def test_request_bounds_before_invocation(
     assert provider.invocations == 0
 
 
-@pytest.mark.parametrize("changes", [{"cache_mode": "read_write"}, {"idempotency_key": "a"}])
+@pytest.mark.parametrize("changes", [{"cache_mode": "read_write"}])
 async def test_later_features_are_not_silently_ignored(
     client: httpx.AsyncClient, provider: MockProvider, changes: dict[str, object]
 ) -> None:
     response = await client.post("/v1/generate", json={"input": "hello", **changes})
     assert response.status_code == 422
+    assert provider.invocations == 0
+
+
+async def test_keyed_execution_requires_stable_replay_key(
+    client: httpx.AsyncClient, provider: MockProvider
+) -> None:
+    response = await client.post("/v1/generate", json={"input": "hello", "idempotency_key": "a"})
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "DEPENDENCY_UNAVAILABLE"
     assert provider.invocations == 0
 
 
@@ -196,14 +239,29 @@ async def test_health_without_auth_and_database(
     assert response.json()["components"]["database"] == "unavailable"
 
 
-async def test_optional_redis_degradation(memory: MemoryStore) -> None:
+async def test_critical_redis_degradation(memory: MemoryStore) -> None:
     app = create_app(Settings(redis_url="redis://127.0.0.1:1"), store=memory)
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app), base_url="http://test"
     ) as client:
         response = await client.get("/health/ready")
-    assert response.status_code == 200
-    assert response.json()["components"]["redis"] == "degraded_optional"
+    assert response.status_code == 503
+    assert response.json()["components"]["redis"] == "unavailable_critical"
+
+
+async def test_control_outage_denies_execution_before_invocation(memory: MemoryStore) -> None:
+    provider = MockProvider()
+    app = create_app(Settings(redis_url="redis://127.0.0.1:1"), store=memory, provider=provider)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app),
+        base_url="http://test",
+        headers={"X-API-Key": memory.key},
+    ) as client:
+        response = await client.post("/v1/generate", json={"input": "synthetic"})
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "DEPENDENCY_UNAVAILABLE"
+    assert provider.invocations == 0
+    assert memory.records == {}
 
 
 async def test_chunked_body_limit(memory: MemoryStore, provider: MockProvider) -> None:

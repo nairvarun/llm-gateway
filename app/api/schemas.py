@@ -12,7 +12,9 @@ MetadataValue = Annotated[str, StringConstraints(strict=True, max_length=256)]
 
 
 class GenerateRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid", json_schema_extra={"examples": [{"input": "synthetic demo"}]}
+    )
 
     input: Annotated[str, StringConstraints(strict=True, min_length=1, max_length=100_000)]
     model_policy: ShortString = "mock"
@@ -37,6 +39,18 @@ class GenerateRequest(BaseModel):
 
 
 class ExtractRequest(GenerateRequest):
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "examples": [
+                {
+                    "input": '{"count": 2}',
+                    "schema_name": "demo-count",
+                    "schema_version": "v1",
+                }
+            ]
+        },
+    )
     task_type: Literal["extraction"] = "extraction"
     json_schema: JSONSchema | None = None
     schema_name: ShortString | None = None
@@ -54,6 +68,7 @@ class UsageResponse(BaseModel):
 
 class ExecutionResponse(BaseModel):
     request_id: UUID
+    original_request_id: UUID | None = None
     provider: str
     model: str
     finish_reason: FinishReason
@@ -84,6 +99,7 @@ class ErrorDetail(BaseModel):
 class ErrorResponse(BaseModel):
     error: ErrorDetail
     request_id: UUID
+    original_request_id: UUID | None = None
 
 
 class HealthResponse(BaseModel):
