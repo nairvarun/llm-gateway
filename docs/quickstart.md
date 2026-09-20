@@ -1,8 +1,9 @@
-# Offline quickstart (milestones 1–3)
+# Offline quickstart (milestones 1–4)
 
 This runs the offline service: authenticated generation, locally validated
 extraction, a deterministic mock, versioned routing, bounded retries, shared
-Redis controls, optional keyed replay, and durable PostgreSQL evidence. No paid
+Redis controls, optional keyed replay, atomic spend reservations, opt-in exact
+cache, and durable PostgreSQL evidence. No paid
 provider/AWS account is needed. Internet access is needed initially to download
 Python packages and container images; provider invocations themselves are offline.
 
@@ -183,8 +184,74 @@ same literal key. Same-tenant endpoint/key/fingerprint repeats replay an encrypt
 terminal result under a new ingress ID with `original_request_id`; conflicts
 return 409, in-progress owners return 409 plus `Retry-After`, and uncertain
 execution remains blocked. Replay reports zero fresh provider usage and points
-to original evidence. A later retention job will purge expired protected bytes;
+to original evidence. The operator retention job purges expired protected bytes;
 expiry already prevents replay. See [reliability verification](milestone-3-verification.md).
+
+## Spend and exact cache
+
+The local synthetic tenant starts with a USD 1 per-request ceiling, USD 10 UTC
+daily allowance, and USD 100 UTC monthly allowance. These are local defaults,
+not approved production tenant limits. PostgreSQL atomically reserves an upper
+estimate before every attempt; retries and fallback share the original request
+ceiling. Known usage releases confirmed unused allowance. Unknown usage retains
+its hold until an audited operator recovery conservatively charges it. Overruns
+are recorded and disable the provider pending review. These controls bound
+admitted **estimated liability**, not a provider invoice. The free mock has
+zero-priced default entries; nonzero synthetic pricing is tested offline.
+
+Authenticated clients can read only their own current UTC allowance at
+`GET /v1/spend`. The local CLI can show the same view; an operator credential
+can choose another tenant for investigation:
+
+```sh
+uv run gateway spend-summary
+uv run gateway spend-summary --tenant-id TENANT_UUID --key-file .local/operator-key
+uv run gateway recover-unknown-attempt ATTEMPT_UUID --key-file .local/operator-key
+```
+
+Exact cache is opt-in. Supply a stable external `GATEWAY_CACHE_ENCRYPTION_KEY`
+containing a base64-encoded 32-byte random key before startup; never commit or
+log it. The local synthetic tenant is approved for synthetic fixtures only;
+other tenants default to unapproved. A request must set both
+`"cache_mode":"read_write"` (or `"read_only"`) and
+`"cache_classification":"approved_non_sensitive"`, with temperature zero.
+Sensitive/unclassified or nondeterministic requests bypass the cache and report
+`cache_status: "ineligible"`. Classification is a caller attestation under an
+operator-approved tenant; the gateway does not inspect prose to prove it is
+non-sensitive. Do not opt in production personal data. Missing/failed optional
+cache degrades to uncached execution only while critical database and Redis
+admission controls remain healthy. Cache entries are encrypted, exact-keyed by
+tenant/application/schema/parameters/versions, and capped at one hour.
+Successful hits report zero fresh provider usage/cost and a source request ID.
+
+Operators can change cache approval or invalidate an exact identity or whole
+application namespace. The exact identity hash appears in the response's
+`routing.cache_key_hash` for opted-in eligible traffic; it is not the raw input.
+
+```sh
+uv run gateway approve-cache TENANT_UUID --key-file .local/operator-key
+uv run gateway revoke-cache TENANT_UUID --key-file .local/operator-key
+uv run gateway invalidate-cache-exact TENANT_UUID APP_ID CACHE_KEY_HASH --key-file .local/operator-key
+uv run gateway invalidate-cache-namespace TENANT_UUID APP_ID --key-file .local/operator-key
+```
+
+The operator commands are audited in PostgreSQL. Invalidation advances durable
+generations; old in-flight cache writes cannot populate the newly active
+generation. Single-flight is fenced and deadline-bounded, not exactly-once
+external execution. Read-only mode never writes on a miss.
+
+Run `uv run gateway purge-retention --key-file .local/operator-key` on a trusted
+daily schedule for physical deletion of expired replay records and old
+operational metadata. Configure `GATEWAY_REPLAY_RETENTION_HOURS` (at most 24),
+`GATEWAY_CACHE_TTL_SECONDS` (at most 3600), and
+`GATEWAY_METADATA_RETENTION_DAYS` (default 30) within their validated bounds.
+Redis cache entries expire by TTL. Unresolved budget holds and the active UTC
+month bucket remain until safe reconciliation; tenant credentials, immutable
+configuration, and invalidation generations are not deleted by this job.
+Database backups and Redis snapshots may retain deleted ciphertext or metadata
+until their separate backup lifecycle expires; this local repo does not configure
+that lifecycle. Do not claim production erasure from the purge command alone.
+See [milestone 4 evidence](milestone-4-verification.md).
 
 Request evidence includes status/identity/policy/routing/error metadata, never raw input
 or output. Keys are verification hashes in PostgreSQL. Input hashes use a keyed
@@ -247,9 +314,9 @@ is deliberately disabled; future schema changes need forward migrations.
 OpenAI and Anthropic adapters and deterministic ranking have offline contract
 tests, but the HTTP runtime cannot dispatch them. Their conservative token
 bounds remain unavailable, so strict-budget selection excludes them. There is
-no exact cache, atomic spend reservation, evaluation runner,
-metrics/tracing pipeline, or cloud deployment. Cache modes other than bypass
-return `INVALID_REQUEST`; keyed requests without a stable replay key fail closed.
+no evaluation runner, metrics/tracing pipeline, or cloud deployment. Cache
+reuse is exact and conditional on explicit approval and a stable cache key;
+keyed requests without a stable replay key fail closed.
 Deadline/cancellation/recovery controls have offline fault evidence, not a
 production network/billing guarantee. Redis is correctness-critical for new
 dispatch and readiness, not an optional optimization.
@@ -258,6 +325,6 @@ Raw prompts/outputs are not stored or logged by the application. Usage is linked
 to request/attempt/pricing records before success is returned. A failed terminal
 write leaves dispatch intent unresolved and returns a non-retryable error;
 uncertain keyed state cannot be redispatched automatically. Crash recovery
-records an unknown attempt and conservative upper liability; full budget holds
-and reconciliation belong to milestone 4. This is an offline reliability demo,
+retains an unknown attempt and conservative upper liability until audited
+reconciliation. This is an offline reliability demo,
 not a production-ready gateway or a benchmark achievement.

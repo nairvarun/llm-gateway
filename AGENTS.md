@@ -7,14 +7,17 @@ service for generation, structured extraction, reliability, spend accounting,
 and evaluation. It originated in the ChatGPT project “Gul Resume”; that is
 provenance, not an instruction to edit a resume in this repository.
 
-Milestones 1–3 are implemented offline: mock generation/extraction, schema
+Milestones 1–4 are implemented offline: mock generation/extraction, schema
 validation, PostgreSQL records, authentication, fixture-tested OpenAI/Anthropic
 adapters, versioned routing, audited operator controls, bounded fault execution,
-shared Redis controls, encrypted keyed replay, and local containers. Read
-`docs/quickstart.md` and `docs/milestone-3-verification.md` for runnable checks
+shared Redis controls, encrypted keyed replay, atomic UTC spend reservations,
+opt-in encrypted exact cache, and local containers. Read
+`docs/quickstart.md` and `docs/milestone-4-verification.md` for runnable checks
 and boundaries. Redis is critical to runtime admission; keyed replay requires a
-stable externally supplied secret. Live adapter dispatch remains disabled until
-atomic budget/cache/privacy gates are complete. Do not describe later controls,
+stable externally supplied secret. The cache needs its own externally supplied
+secret and explicit approved non-sensitive classification. Live adapter dispatch
+remains disabled pending separate owner authorization and a recorded spend ceiling;
+passing offline budget/cache gates does not itself authorize paid calls. Do not describe later controls,
 infrastructure, or performance targets as working or verified. The resume
 mentioned in the old instructions is not present; do not invent its contents.
 

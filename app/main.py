@@ -1,5 +1,6 @@
 from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
+from decimal import Decimal
 from typing import Annotated, Any
 
 from fastapi import Depends, FastAPI, Request
@@ -19,7 +20,10 @@ from app.api.schemas import (
     GenerateRequest,
     GenerateResponse,
     HealthResponse,
+    SpendBucketResponse,
+    SpendSummaryResponse,
 )
+from app.cache.redis_cache import Cache, RedisCache
 from app.config import Settings, load_settings
 from app.domain.control import (
     Control,
@@ -30,7 +34,7 @@ from app.domain.control import (
 )
 from app.domain.deadline import DeadlineExpired
 from app.domain.errors import GatewayError
-from app.domain.models import Principal, Provider, StateUnavailable, Store
+from app.domain.models import Principal, Provider, SpendBucketView, StateUnavailable, Store
 from app.persistence.database import database_engine
 from app.persistence.store import PostgresStore
 from app.providers.mock import MockProvider, MockStep
@@ -50,6 +54,7 @@ def create_app(
     provider: Provider | None = None,
     providers: Mapping[tuple[str, str], Provider] | None = None,
     control: Control | None = None,
+    cache: Cache | None = None,
 ) -> FastAPI:
     settings = settings or load_settings()
     engine = (
@@ -70,6 +75,14 @@ def create_app(
         if settings.redis_url is not None
         else None
     )
+    cache_url = settings.cache_redis_url or settings.redis_url
+    cache_redis = (
+        Redis.from_url(cache_url.get_secret_value(), socket_timeout=1, socket_connect_timeout=1)
+        if cache is None and settings.cache_encryption_key is not None and cache_url is not None
+        else None
+    )
+    if cache is None and cache_redis is not None:
+        cache = RedisCache(cache_redis)
     if control is None:
         if control_redis is not None:
             control = RedisControl(
@@ -87,7 +100,9 @@ def create_app(
             )
         else:
             control = LocalControl() if engine is None else UnavailableControl()
-    service = GatewayService(settings, store, provider, providers=providers, control=control)
+    service = GatewayService(
+        settings, store, provider, providers=providers, control=control, cache=cache
+    )
     active_store = store
 
     @asynccontextmanager
@@ -97,16 +112,18 @@ def create_app(
             await engine.dispose()
         if control_redis is not None:
             await control_redis.aclose()
+        if cache_redis is not None:
+            await cache_redis.aclose()
 
     application = FastAPI(
         title="LLM Reliability Gateway",
         version="0.1.0",
         lifespan=lifespan,
         description=(
-            "Milestones 1–3: offline mock execution with versioned routing, bounded retries, "
-            "shared Redis admission/circuits, and optional encrypted keyed replay. Live adapters "
-            "are fixture-tested but cannot dispatch through this API; atomic budgets, exact "
-            "cache, evaluation execution, and staging remain unavailable."
+            "Milestones 1–4: offline mock execution with versioned routing, bounded retries, "
+            "shared Redis admission/circuits, optional encrypted keyed replay, atomic UTC "
+            "budgets, and opt-in encrypted exact cache. Live adapters are fixture-tested but "
+            "cannot dispatch through this API; evaluation execution and staging remain unavailable."
         ),
     )
     application.add_middleware(RequestBoundary, limit=settings.body_limit_bytes)
@@ -193,6 +210,26 @@ def create_app(
         assert isinstance(response, ExtractResponse)
         return response
 
+    @application.get("/v1/spend", response_model=SpendSummaryResponse, responses=ERROR_RESPONSES)
+    async def spend(principal: Annotated[Principal, Depends(authenticate)]) -> SpendSummaryResponse:
+        summary = await active_store.spend_summary(principal, principal.tenant_id)
+
+        def view(bucket: SpendBucketView) -> SpendBucketResponse:
+            return SpendBucketResponse(
+                starts_at=bucket.starts_at,
+                limit_usd=bucket.limit_usd,
+                committed_usd=bucket.committed_usd,
+                held_usd=bucket.held_usd,
+                remaining_usd=max(
+                    bucket.limit_usd - bucket.committed_usd - bucket.held_usd,
+                    Decimal("0"),
+                ),
+            )
+
+        return SpendSummaryResponse(
+            tenant_id=summary.tenant_id, day=view(summary.day), month=view(summary.month)
+        )
+
     @application.get("/health/live", response_model=HealthResponse)
     async def live() -> HealthResponse:
         return HealthResponse(status="live")
@@ -208,6 +245,12 @@ def create_app(
             "telemetry": "not_configured",
             "cache": "not_configured",
         }
+        if cache_redis is not None:
+            try:
+                await cache_redis.ping()
+                components["cache"] = "healthy"
+            except (OSError, RedisError):
+                components["cache"] = "degraded"
         control_healthy = False
         if control_redis is not None:
             try:

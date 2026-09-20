@@ -26,6 +26,9 @@ class Tenant(Base):
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     name: Mapped[str] = mapped_column(String(100))
     status: Mapped[str] = mapped_column(String(16), default="active")
+    daily_budget_usd: Mapped[Decimal] = mapped_column(Numeric(20, 10), default=Decimal("10"))
+    monthly_budget_usd: Mapped[Decimal] = mapped_column(Numeric(20, 10), default=Decimal("100"))
+    cache_approved: Mapped[bool] = mapped_column(default=False)
 
 
 class Credential(Base):
@@ -85,6 +88,7 @@ class RequestRecord(Base):
     policy_version: Mapped[str] = mapped_column(String(100))
     routing_evidence: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     error_code: Mapped[str | None] = mapped_column(String(50))
+    max_cost_usd: Mapped[Decimal | None] = mapped_column(Numeric(20, 10))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
@@ -124,6 +128,58 @@ class UsageEvent(Base):
     usage_status: Mapped[str] = mapped_column(String(16))
     estimated_cost_usd: Mapped[Decimal] = mapped_column(Numeric(20, 10))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class BudgetBucket(Base):
+    __tablename__ = "budget_buckets"
+    __table_args__ = (
+        CheckConstraint("period IN ('day', 'month')"),
+        CheckConstraint("limit_usd > 0"),
+        CheckConstraint("held_usd >= 0"),
+        CheckConstraint("committed_usd >= 0"),
+    )
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id"), primary_key=True)
+    period: Mapped[str] = mapped_column(String(8), primary_key=True)
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
+    limit_usd: Mapped[Decimal] = mapped_column(Numeric(20, 10))
+    held_usd: Mapped[Decimal] = mapped_column(Numeric(20, 10), default=0)
+    committed_usd: Mapped[Decimal] = mapped_column(Numeric(20, 10), default=0)
+
+
+class SpendReservation(Base):
+    __tablename__ = "spend_reservations"
+    __table_args__ = (
+        CheckConstraint("state IN ('held', 'reconciled', 'conservative', 'released')"),
+        CheckConstraint("reserved_usd >= 0"),
+        CheckConstraint("charged_usd >= 0"),
+    )
+    attempt_id: Mapped[UUID] = mapped_column(ForeignKey("attempts.id"), primary_key=True)
+    request_id: Mapped[UUID] = mapped_column(ForeignKey("requests.id"), index=True)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id"), index=True)
+    day_start: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    month_start: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    reserved_usd: Mapped[Decimal] = mapped_column(Numeric(20, 10))
+    charged_usd: Mapped[Decimal] = mapped_column(Numeric(20, 10), default=0)
+    overrun_usd: Mapped[Decimal] = mapped_column(Numeric(20, 10), default=0)
+    state: Mapped[str] = mapped_column(String(16), default="held")
+    reconciled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class CacheNamespace(Base):
+    __tablename__ = "cache_namespaces"
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id"), primary_key=True)
+    application_id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    generation: Mapped[int] = mapped_column(default=1)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class CacheKeyGeneration(Base):
+    __tablename__ = "cache_key_generations"
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id"), primary_key=True)
+    application_id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    key_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    generation: Mapped[int] = mapped_column(default=1)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class IdempotencyRecord(Base):

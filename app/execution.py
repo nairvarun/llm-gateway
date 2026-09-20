@@ -14,6 +14,7 @@ from app.domain.control import Admission, Control, ControlRejected
 from app.domain.deadline import Deadline, DeadlineExpired
 from app.domain.errors import GatewayError
 from app.domain.models import (
+    BudgetExceeded,
     Dispatch,
     ExecutionSnapshot,
     FailureKind,
@@ -98,6 +99,7 @@ class AttemptExecutor:
         evidence: dict[str, JSONValue],
         deadline: Deadline,
     ) -> AttemptOutcome:
+        assert request.max_cost_usd is not None  # Service resolves the server ceiling first.
         eligible = [item for item in decision.ranked if item.eligible]
         if not registry.policy.fallback_enabled:
             eligible = eligible[:1]
@@ -106,7 +108,6 @@ class AttemptExecutor:
             for item in registry.models
         }
         attempts = 0
-        admitted_liability = Decimal("0")
         total_cost = Decimal("0")
         usages: list[TokenUsage] = []
         last_error = GatewayError("PROVIDER_UNAVAILABLE", "No provider completed the request.", 503)
@@ -133,7 +134,7 @@ class AttemptExecutor:
                     break
                 if (
                     request.max_cost_usd is not None
-                    and admitted_liability + upper_cost > request.max_cost_usd
+                    and total_cost + upper_cost > request.max_cost_usd
                 ):
                     last_error = GatewayError(
                         "BUDGET_EXCEEDED", "Request cost ceiling is exhausted.", 429
@@ -150,6 +151,7 @@ class AttemptExecutor:
                             input_hash,
                             schema_hash,
                             snapshot,
+                            request.max_cost_usd,
                         )
                         if attempts == 0
                         else partial(self.store.add_attempt, request_id, attempts + 1, snapshot)
@@ -161,6 +163,26 @@ class AttemptExecutor:
                 except DeadlineExpired:
                     last_error = GatewayError("DEADLINE_EXCEEDED", "Request deadline expired.", 504)
                     break
+                except BudgetExceeded as error:
+                    if attempts == 0:
+                        await deadline.run(
+                            lambda: self.store.reject_routing(
+                                principal,
+                                request_id,
+                                endpoint,
+                                input_hash,
+                                schema_hash,
+                                registry.policy_id,
+                                registry.policy_version,
+                                evidence,
+                                "BUDGET_EXCEEDED",
+                            )
+                        )
+                    else:
+                        await self._complete(deadline, request_id, "failed", "BUDGET_EXCEEDED")
+                    raise GatewayError(
+                        "BUDGET_EXCEEDED", "Request or tenant allowance is exhausted.", 429
+                    ) from error
                 attempts += 1
                 usage = TokenUsage(None, None, "unknown")
                 cost = upper_cost
@@ -187,7 +209,6 @@ class AttemptExecutor:
                         if deadline.remaining(reserve_recording=True) * 1000 < max(1, minimum_ms):
                             candidate_deadline_excluded = True
                             raise DeadlineExpired()
-                        admitted_liability += upper_cost
                         invoked = True
                         result = await deadline.run(
                             partial(

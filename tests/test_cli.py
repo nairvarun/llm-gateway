@@ -8,6 +8,7 @@ import pytest
 from sqlalchemy import func, select, text
 
 from app.cli import run, wait_database, write_private_key
+from app.domain.errors import GatewayError
 from app.domain.models import StateUnavailable
 from app.persistence.bootstrap import bootstrap_local
 from app.persistence.database import database_engine
@@ -124,3 +125,51 @@ async def test_operator_routing_cli_commands(
     assert (await postgres.registry()).policy_version == "v2"
     assert tenant.role == "tenant"
     assert operator_key not in capsys.readouterr().out
+
+
+@pytest.mark.integration
+async def test_operator_cache_cli_is_audited_and_tenant_key_cannot_invalidate(
+    postgres: PostgresStore,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async with postgres.engine.connect() as connection:
+        schema = await connection.scalar(text("SELECT current_schema()"))
+    monkeypatch.setenv("GATEWAY_DATABASE_SCHEMA", str(schema))
+    monkeypatch.setenv(
+        "GATEWAY_DATABASE_URL", str(postgres.engine.url.render_as_string(hide_password=False))
+    )
+    _, tenant = await bootstrap_local(postgres)
+    operator_key, _ = await bootstrap_local(postgres, role="operator")
+    operator_file = tmp_path / "operator"
+    write_private_key(operator_file, operator_key)
+    identity = "a" * 64
+    assert await postgres.cache_generations(tenant, identity) == (1, 1)
+    with pytest.raises(GatewayError):
+        await postgres.invalidate_cache_exact(
+            tenant, tenant.tenant_id, tenant.application_id, identity
+        )
+    for command in ("revoke-cache", "approve-cache"):
+        await run(
+            argparse.Namespace(
+                command=command, key_file=str(operator_file), tenant_id=str(tenant.tenant_id)
+            )
+        )
+    await run(
+        argparse.Namespace(
+            command="invalidate-cache-exact",
+            key_file=str(operator_file),
+            tenant_id=str(tenant.tenant_id),
+            application_id=tenant.application_id,
+            key_hash=identity,
+        )
+    )
+    await run(
+        argparse.Namespace(
+            command="invalidate-cache-namespace",
+            key_file=str(operator_file),
+            tenant_id=str(tenant.tenant_id),
+            application_id=tenant.application_id,
+        )
+    )
+    assert await postgres.cache_generations(tenant, identity) == (4, 2)

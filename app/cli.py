@@ -113,6 +113,37 @@ async def run(args: argparse.Namespace) -> None:
                 principal, args.provider, args.command == "disable-provider"
             )
             print(f"Provider {args.provider} control updated; audit recorded.")
+        elif args.command == "recover-unknown-attempt":
+            principal = await authenticate_file(store, key_file)
+            changed = await store.conservative_recover_attempt(principal, UUID(args.attempt_id))
+            print("Conservative charge recorded." if changed else "Attempt was already reconciled.")
+        elif args.command in {"approve-cache", "revoke-cache"}:
+            principal = await authenticate_file(store, key_file)
+            await store.set_cache_approval(
+                principal, UUID(args.tenant_id), args.command == "approve-cache"
+            )
+            print("Cache approval updated; audit recorded.")
+        elif args.command == "invalidate-cache-namespace":
+            principal = await authenticate_file(store, key_file)
+            generation = await store.invalidate_cache_namespace(
+                principal, UUID(args.tenant_id), args.application_id
+            )
+            print(f"Namespace invalidated at generation {generation}; audit recorded.")
+        elif args.command == "invalidate-cache-exact":
+            principal = await authenticate_file(store, key_file)
+            generation = await store.invalidate_cache_exact(
+                principal, UUID(args.tenant_id), args.application_id, args.key_hash
+            )
+            print(f"Exact key invalidated at generation {generation}; audit recorded.")
+        elif args.command == "spend-summary":
+            principal = await authenticate_file(store, key_file)
+            target = UUID(args.tenant_id) if args.tenant_id is not None else principal.tenant_id
+            summary = await store.spend_summary(principal, target)
+            print(json.dumps(asdict(summary), default=str, indent=2))
+        elif args.command == "purge-retention":
+            principal = await authenticate_file(store, key_file)
+            counts = await store.purge_retention(principal, settings.metadata_retention_days)
+            print(json.dumps(counts, sort_keys=True))
     finally:
         await engine.dispose()
 
@@ -153,6 +184,35 @@ def main() -> None:
         command = commands.add_parser(action, help="Change audited provider availability")
         command.add_argument("provider")
         command.add_argument("--key-file", default=".local/operator-key")
+    recovery = commands.add_parser(
+        "recover-unknown-attempt", help="Audit a conservative charge for unknown usage"
+    )
+    recovery.add_argument("attempt_id")
+    recovery.add_argument("--key-file", default=".local/operator-key")
+    for action in ("approve-cache", "revoke-cache"):
+        command = commands.add_parser(action, help="Set audited tenant cache eligibility")
+        command.add_argument("tenant_id")
+        command.add_argument("--key-file", default=".local/operator-key")
+    namespace = commands.add_parser(
+        "invalidate-cache-namespace", help="Advance audited application cache namespace"
+    )
+    namespace.add_argument("tenant_id")
+    namespace.add_argument("application_id")
+    namespace.add_argument("--key-file", default=".local/operator-key")
+    exact = commands.add_parser(
+        "invalidate-cache-exact", help="Invalidate one exact cache identity"
+    )
+    exact.add_argument("tenant_id")
+    exact.add_argument("application_id")
+    exact.add_argument("key_hash")
+    exact.add_argument("--key-file", default=".local/operator-key")
+    spend = commands.add_parser("spend-summary", help="Read current UTC tenant allowances")
+    spend.add_argument("--tenant-id")
+    spend.add_argument("--key-file", default=".local/client-key")
+    purge = commands.add_parser(
+        "purge-retention", help="Delete expired protected content and metadata"
+    )
+    purge.add_argument("--key-file", default=".local/operator-key")
     args = parser.parse_args()
     try:
         asyncio.run(run(args))

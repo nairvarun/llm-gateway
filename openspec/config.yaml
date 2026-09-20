@@ -2,12 +2,13 @@ schema: spec-driven
 
 context: |
   This is the LLM Reliability Gateway repository, a greenfield Python backend
-  project derived from an informal portfolio-project handoff. Milestone 1 has
-  an offline mock-backed API, schema validation, hashed authentication, PostgreSQL
-  execution/usage evidence, local containers, and unit/API/integration tests.
-  No live providers, later reliability/cache/budget/evaluation controls,
-  measured benchmark results, or cloud deployment exist yet. Use the quickstart
-  and foundation verification documents to distinguish delivered behavior.
+  project derived from an informal portfolio-project handoff. Milestones 1–4
+  have an offline mock-backed API, schema validation, hashed authentication,
+  fixture-tested provider adapters, versioned routing, bounded reliability,
+  PostgreSQL budget reservations, and opt-in encrypted exact cache. Live
+  dispatch, evaluation execution, measured benchmark results, and cloud
+  deployment remain gated. Use the quickstart and milestone verification
+  documents to distinguish delivered behavior from planned requirements.
   Target stack: Python 3.12, FastAPI, Pydantic, asyncio, PostgreSQL, Redis,
   SQLAlchemy/Alembic, pytest, Ruff, mypy, OpenTelemetry, Docker, and Terraform.
   AWS ECS Fargate is the proposed deployment target, not an existing environment.

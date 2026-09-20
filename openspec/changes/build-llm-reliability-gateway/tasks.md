@@ -44,15 +44,15 @@ Coverage: `request-reliability` and failure contracts in `gateway-api`.
 Coverage: `response-cache`, full `usage-budgets`, and protected retention in
 `deployment-security`. Complete this gate before enabling live-provider calls.
 
-- [ ] 4.1 Add request/tenant UTC budget buckets, reservations, and transactional admission; verify competing replicas cannot over-admit a near-exhausted allowance and retries/fallback consume the same request ceiling.
-- [ ] 4.2 Add idempotent reconciliation and unknown-usage holds/conservative recovery; verify failed attempts, duplicate events, overruns, midnight/month rollovers, and post-dispatch crashes are accounted once without assuming free work.
-- [ ] 4.3 Wire reservation/dispatch/terminal transactions into every execution path; verify pre-dispatch persistence failure causes no provider call and post-dispatch failure never returns unrecorded success.
-- [ ] 4.4 Implement exact canonical keying and opt-in eligibility with bypass/read-only/read-write modes; verify significant whitespace, schema/tenant/parameter/version changes remain isolated and sensitive/nondeterministic requests bypass.
-- [ ] 4.5 Add encrypted cache entries, TTL/corruption checks, model eligibility rechecks, and extraction validation; verify expiry/invalid entries miss and valid hits report zero fresh provider usage plus source provenance.
-- [ ] 4.6 Implement fenced single-flight and authorized exact/namespace invalidation; verify concurrent misses, owner loss, invalidation/slow-writer races, and waiter deadlines across replicas.
-- [ ] 4.7 Add authorized spend queries and cache/control failure separation; verify cross-tenant queries fail and optional-cache degradation cannot bypass budget/idempotency/admission controls.
-- [ ] 4.8 Implement retention/deletion for protected cache/replay content and metadata with documented backup limitations; verify expiry prevents serving old content and no raw prompt/output/key appears in default logs or records.
-- [ ] 4.9 Run the integrated mock-backed reliability/cache/accounting/security gate; verify all corresponding spec scenarios pass, and permit any live smoke run only after explicit owner authorization and a recorded spending ceiling.
+- [x] 4.1 Add request/tenant UTC budget buckets, reservations, and transactional admission; verify competing replicas cannot over-admit a near-exhausted allowance and retries/fallback consume the same request ceiling.
+- [x] 4.2 Add idempotent reconciliation and unknown-usage holds/conservative recovery; verify failed attempts, duplicate events, overruns, midnight/month rollovers, and post-dispatch crashes are accounted once without assuming free work.
+- [x] 4.3 Wire reservation/dispatch/terminal transactions into every execution path; verify pre-dispatch persistence failure causes no provider call and post-dispatch failure never returns unrecorded success.
+- [x] 4.4 Implement exact canonical keying and opt-in eligibility with bypass/read-only/read-write modes; verify significant whitespace, schema/tenant/parameter/version changes remain isolated and sensitive/nondeterministic requests bypass.
+- [x] 4.5 Add encrypted cache entries, TTL/corruption checks, model eligibility rechecks, and extraction validation; verify expiry/invalid entries miss and valid hits report zero fresh provider usage plus source provenance.
+- [x] 4.6 Implement fenced single-flight and authorized exact/namespace invalidation; verify concurrent misses, owner loss, invalidation/slow-writer races, and waiter deadlines across replicas.
+- [x] 4.7 Add authorized spend queries and cache/control failure separation; verify cross-tenant queries fail and optional-cache degradation cannot bypass budget/idempotency/admission controls.
+- [x] 4.8 Implement retention/deletion for protected cache/replay content and metadata with documented backup limitations; verify expiry prevents serving old content and no raw prompt/output/key appears in default logs or records.
+- [x] 4.9 Run the integrated mock-backed reliability/cache/accounting/security gate; verify all corresponding spec scenarios pass, and permit any live smoke run only after explicit owner authorization and a recorded spending ceiling.
 
 ## 5. Evaluation and observability — reproducible evidence
 

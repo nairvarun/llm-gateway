@@ -61,6 +61,8 @@ async def test_openapi_examples_are_executable_without_future_modes(
     assert schema["ExtractRequest"]["examples"] == [
         {"input": '{"count": 2}', "schema_name": "demo-count", "schema_version": "v1"}
     ]
+    assert schema["GenerateResponse"]["properties"]["estimated_cost_usd"]["examples"] == ["0"]
+    assert schema["SpendBucketResponse"]["properties"]["limit_usd"]["examples"] == ["10.00"]
 
 
 async def test_nonzero_mock_pricing_uses_decimal_observed_estimate(memory: MemoryStore) -> None:
@@ -144,13 +146,15 @@ async def test_request_bounds_before_invocation(
     assert provider.invocations == 0
 
 
-@pytest.mark.parametrize("changes", [{"cache_mode": "read_write"}])
-async def test_later_features_are_not_silently_ignored(
-    client: httpx.AsyncClient, provider: MockProvider, changes: dict[str, object]
+async def test_unclassified_cache_opt_in_is_explicitly_bypassed(
+    client: httpx.AsyncClient, provider: MockProvider
 ) -> None:
-    response = await client.post("/v1/generate", json={"input": "hello", **changes})
-    assert response.status_code == 422
-    assert provider.invocations == 0
+    response = await client.post(
+        "/v1/generate", json={"input": "hello", "cache_mode": "read_write"}
+    )
+    assert response.status_code == 200
+    assert response.json()["cache_status"] == "ineligible"
+    assert provider.invocations == 1
 
 
 async def test_keyed_execution_requires_stable_replay_key(

@@ -1,5 +1,6 @@
 import hashlib
 import hmac
+import json
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -7,7 +8,9 @@ from random import Random
 from typing import cast
 from uuid import UUID
 
-from app.api.schema_validation import validate_schema
+from pydantic import ValidationError
+
+from app.api.schema_validation import validate_output, validate_schema
 from app.api.schemas import (
     ExtractRequest,
     ExtractResponse,
@@ -15,12 +18,21 @@ from app.api.schemas import (
     GenerateResponse,
     UsageResponse,
 )
+from app.cache.entry import open_entry, seal_entry
+from app.cache.identity import eligibility, exact_identity
+from app.cache.redis_cache import Cache, CacheUnavailable
 from app.config import Settings
 from app.domain.control import Control
 from app.domain.deadline import Clock, Deadline, SystemClock
 from app.domain.errors import GatewayError
-from app.domain.models import JSONSchema, JSONValue, Principal, Provider, Store
-from app.domain.routing import RoutingInput, rank_candidates, sanitized_evidence
+from app.domain.models import ExecutionSnapshot, JSONSchema, JSONValue, Principal, Provider, Store
+from app.domain.routing import (
+    RegistrySnapshot,
+    RoutingDecision,
+    RoutingInput,
+    rank_candidates,
+    sanitized_evidence,
+)
 from app.execution import AttemptExecutor
 from app.security.replay import ReplayCipher
 
@@ -35,6 +47,7 @@ class GatewayService:
         providers: Mapping[tuple[str, str], Provider] | None = None,
         random: Random | None = None,
         control: Control | None = None,
+        cache: Cache | None = None,
     ) -> None:
         self.settings, self.store, self.provider = settings, store, provider
         self.clock = clock or SystemClock()
@@ -43,9 +56,15 @@ class GatewayService:
             **(providers or {}),
         }
         self.executor = AttemptExecutor(store, self.providers, random, control)
+        self.cache = cache
         self.replay_cipher = (
             ReplayCipher(settings.replay_encryption_key.get_secret_value())
             if settings.replay_encryption_key is not None
+            else None
+        )
+        self.cache_cipher = (
+            ReplayCipher(settings.cache_encryption_key.get_secret_value())
+            if settings.cache_encryption_key is not None
             else None
         )
 
@@ -59,11 +78,6 @@ class GatewayService:
         deadline = Deadline(self.clock, started, request.latency_budget_ms)
         if len(request.input) > self.settings.input_limit_chars:
             raise GatewayError("INVALID_REQUEST", "Input exceeds the configured limit.", 422)
-        # Never silently accept an unimplemented safety-affecting feature.
-        if request.cache_mode != "bypass":
-            raise GatewayError(
-                "INVALID_REQUEST", "Exact cache execution is not available yet.", 422
-            )
         if request.model_policy not in {"mock", "mock-v1", "mock@v1"}:
             raise GatewayError(
                 "NO_ELIGIBLE_MODEL", "Only the offline mock policy is available.", 503
@@ -167,19 +181,139 @@ class GatewayService:
                 "No eligible offline model: " + ", ".join(reasons or ["unavailable"]),
                 503,
             )
-        outcome = await self.executor.run(
-            principal,
-            request_id,
-            endpoint,
-            input_hash,
-            schema_hash,
-            request.model_copy(update={"max_cost_usd": effective_ceiling}),
-            schema,
-            registry,
-            decision,
-            evidence,
-            deadline,
-        )
+        cache_status = "bypass"
+        cache_key: str | None = None
+        cache_token: str | None = None
+        if request.cache_mode != "bypass":
+            approved = await deadline.run(
+                lambda: self.store.cache_approved(principal), reserve_recording=True
+            )
+            cache_eligibility = eligibility(request, approved)
+            cache_status = "miss" if cache_eligibility.eligible else "ineligible"
+            if cache_eligibility.eligible:
+                if self.cache is None or self.cache_cipher is None:
+                    cache_status = "degraded"
+                else:
+                    cache = self.cache
+                    identity = exact_identity(
+                        self.cache_cipher._key, principal, endpoint, request, schema, registry
+                    )
+                    namespace_generation, exact_generation = await deadline.run(
+                        lambda: self.store.cache_generations(principal, identity),
+                        reserve_recording=True,
+                    )
+                    active_cache_key = f"{namespace_generation}:{exact_generation}:{identity}"
+                    cache_key = active_cache_key
+                    evidence["cache_key_hash"] = identity
+                    try:
+                        cached = await self._cached_response(
+                            principal,
+                            request_id,
+                            started,
+                            request,
+                            endpoint,
+                            schema,
+                            input_hash,
+                            schema_hash,
+                            effective_ceiling,
+                            registry,
+                            decision,
+                            evidence,
+                            active_cache_key,
+                            identity,
+                            deadline,
+                        )
+                        if cached is not None:
+                            return cached
+                        if request.cache_mode == "read_write":
+                            while cache_token is None:
+                                cache_token = await deadline.run(
+                                    lambda: cache.claim(
+                                        active_cache_key,
+                                        max(
+                                            1,
+                                            int(deadline.remaining(reserve_recording=True) * 1000),
+                                        ),
+                                    ),
+                                    reserve_recording=True,
+                                )
+                                if cache_token is not None:
+                                    # The prior owner may have published between our
+                                    # last read and this newly acquired lease.
+                                    cached = await self._cached_response(
+                                        principal,
+                                        request_id,
+                                        started,
+                                        request,
+                                        endpoint,
+                                        schema,
+                                        input_hash,
+                                        schema_hash,
+                                        effective_ceiling,
+                                        registry,
+                                        decision,
+                                        evidence,
+                                        active_cache_key,
+                                        identity,
+                                        deadline,
+                                    )
+                                    if cached is not None:
+                                        try:
+                                            await cache.release(active_cache_key, cache_token)
+                                        except CacheUnavailable:
+                                            pass  # The lease expires; no provider work follows.
+                                        return cached
+                                    break
+                                await deadline.sleep(0.02)
+                                cached = await self._cached_response(
+                                    principal,
+                                    request_id,
+                                    started,
+                                    request,
+                                    endpoint,
+                                    schema,
+                                    input_hash,
+                                    schema_hash,
+                                    effective_ceiling,
+                                    registry,
+                                    decision,
+                                    evidence,
+                                    active_cache_key,
+                                    identity,
+                                    deadline,
+                                )
+                                if cached is not None:
+                                    return cached
+                    except CacheUnavailable:
+                        # A cache-only fault may degrade, but controls must still work.
+                        if control is not None:
+                            await deadline.run(
+                                lambda: control.health("mock"), reserve_recording=True
+                            )
+                        cache_status = "degraded"
+                        cache_key = None
+                        cache_token = None
+        try:
+            outcome = await self.executor.run(
+                principal,
+                request_id,
+                endpoint,
+                input_hash,
+                schema_hash,
+                request.model_copy(update={"max_cost_usd": effective_ceiling}),
+                schema,
+                registry,
+                decision,
+                evidence,
+                deadline,
+            )
+        except BaseException:
+            if cache_token is not None and self.cache is not None and cache_key is not None:
+                try:
+                    await self.cache.release(cache_key, cache_token)
+                except CacheUnavailable:
+                    pass
+            raise
         common = {
             "request_id": request_id,
             "provider": outcome.provider,
@@ -198,10 +332,152 @@ class GatewayService:
             "policy_version": registry.policy_version,
             "routing": evidence,
             "fallback_used": outcome.fallback_used,
+            "cache_status": cache_status,
         }
         if schema is not None:
-            return ExtractResponse.model_validate({**common, "output": outcome.output})
-        return GenerateResponse.model_validate({**common, "output": outcome.output})
+            response: GenerateResponse | ExtractResponse = ExtractResponse.model_validate(
+                {**common, "output": outcome.output}
+            )
+        else:
+            response = GenerateResponse.model_validate({**common, "output": outcome.output})
+        if cache_token is not None and self.cache is not None and cache_key is not None:
+            assert self.cache_cipher is not None
+            try:
+                content = seal_entry(
+                    self.cache_cipher,
+                    principal.tenant_id,
+                    endpoint,
+                    cache_key,
+                    request_id,
+                    response.model_dump(mode="json"),
+                    self.settings.cache_ttl_seconds,
+                )
+                published = await self.cache.publish(
+                    cache_key, cache_token, content, self.settings.cache_ttl_seconds
+                )
+                if not published:
+                    response.cache_status = "degraded"
+            except CacheUnavailable:
+                response.cache_status = "degraded"
+        return response
+
+    async def _cached_response(
+        self,
+        principal: Principal,
+        request_id: UUID,
+        started: float,
+        request: GenerateRequest,
+        endpoint: str,
+        schema: JSONSchema | None,
+        input_hash: str,
+        schema_hash: str | None,
+        effective_ceiling: Decimal,
+        registry: RegistrySnapshot,
+        decision: RoutingDecision,
+        evidence: dict[str, JSONValue],
+        cache_key: str,
+        identity: str,
+        deadline: Deadline,
+    ) -> GenerateResponse | ExtractResponse | None:
+        cache = self.cache
+        assert cache is not None and self.cache_cipher is not None
+        raw = await deadline.run(lambda: cache.read(cache_key), reserve_recording=True)
+        if raw is None:
+            return None
+        entry = open_entry(self.cache_cipher, principal.tenant_id, endpoint, cache_key, raw)
+        if entry is None:
+            return None
+        current_generations = await deadline.run(
+            lambda: self.store.cache_generations(principal, identity),
+            reserve_recording=True,
+        )
+        if cache_key != f"{current_generations[0]}:{current_generations[1]}:{identity}":
+            return None
+        try:
+            source: GenerateResponse | ExtractResponse
+            if isinstance(request, ExtractRequest):
+                source = ExtractResponse.model_validate(entry.response)
+            else:
+                source = GenerateResponse.model_validate(entry.response)
+        except ValidationError:
+            return None
+        if (
+            source.request_id != entry.source_request_id
+            or source.policy_version != registry.policy_version
+        ):
+            return None
+        candidate = next(
+            (
+                model
+                for model in registry.models
+                if model.payload.provider == source.provider
+                and model.payload.model == source.model
+                and any(
+                    item.eligible
+                    and item.provider == source.provider
+                    and item.model == source.model
+                    for item in decision.ranked
+                )
+            ),
+            None,
+        )
+        if candidate is None:
+            return None
+        if not await deadline.run(
+            lambda: self.store.provider_enabled(source.provider), reserve_recording=True
+        ):
+            return None
+        if schema is not None:
+            try:
+                validate_output(json.dumps(source.output), schema)
+            except GatewayError:
+                return None
+        snapshot = ExecutionSnapshot(
+            registry.policy_id,
+            registry.policy_version,
+            candidate.id,
+            candidate.pricing_id,
+            candidate.pricing_version,
+            candidate.pricing.input_per_million,
+            candidate.pricing.output_per_million,
+            candidate.payload.provider,
+            candidate.payload.model,
+            evidence,
+            Decimal("0"),
+        )
+        await deadline.run(
+            lambda: self.store.record_cache_hit(
+                principal,
+                request_id,
+                endpoint,
+                input_hash,
+                schema_hash,
+                snapshot,
+                entry.source_request_id,
+                effective_ceiling,
+            ),
+            reserve_recording=True,
+        )
+        revised = source.model_dump(mode="json")
+        revised.update(
+            request_id=request_id,
+            original_request_id=entry.source_request_id,
+            cache_hit=True,
+            cache_status="hit",
+            estimated_cost_usd="0",
+            latency_ms=(self.clock.now() - started) * 1000,
+            usage={
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "status": "cache",
+                "complete": True,
+                "attempt_count": 0,
+                "source_request_id": entry.source_request_id,
+            },
+        )
+        if isinstance(request, ExtractRequest):
+            return ExtractResponse.model_validate(revised)
+        return GenerateResponse.model_validate(revised)
 
     async def _keyed(
         self,
@@ -229,7 +505,7 @@ class GatewayService:
                 key_hash,
                 fingerprint,
                 request_id,
-                now + timedelta(hours=24),
+                now + timedelta(hours=self.settings.replay_retention_hours),
                 now + timedelta(milliseconds=request.latency_budget_ms + 30_000),
             ),
             reserve_recording=True,

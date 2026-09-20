@@ -114,7 +114,7 @@ async def bootstrap_local(store: PostgresStore, *, role: str = "tenant") -> tupl
     key, tenant_id, credential_id = new_api_key(), uuid4(), uuid4()
     async with store.sessions.begin() as session:
         await _ensure_mock_configuration(session)
-        session.add(Tenant(id=tenant_id, name="Synthetic local demo"))
+        session.add(Tenant(id=tenant_id, name="Synthetic local demo", cache_approved=True))
         await session.flush()
         session.add(
             Credential(

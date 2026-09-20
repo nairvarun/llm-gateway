@@ -3,11 +3,11 @@
 See [proposal.md](proposal.md) for motivation and capability scope. At proposal
 creation the repository had no application code or API/data migrations. Milestone
 1 now supplies the offline foundation; see [its verification report](../../../docs/milestone-1-verification.md).
-Milestones 2–3 now add offline routing and reliability evidence; remaining budget,
-cache, evaluation, and deployment decisions describe planned work. The historical handoff
+Milestones 2–4 now add offline routing, reliability, budgets, and exact-cache
+evidence; remaining evaluation and deployment decisions describe planned work. The historical handoff
 is preserved in [the reference snapshot](../../../docs/reference/original-handoff.md).
-The capability files under `specs/` describe the full planned contract; only the
-completed foundation tasks have implementation evidence.
+The capability files under `specs/` describe the full planned contract; only
+checked tasks have implementation evidence.
 
 This design is required because durable spend/idempotency state, concurrent
 execution, provider failures, privacy, and deployment cross several boundaries.
@@ -225,6 +225,14 @@ transit/at rest with application-level encrypted envelopes. Use fencing tokens
 for single-flight leases and generation checks on invalidation/writes. Exact-key
 invalidation uses a per-key generation/tombstone as well, so a slow in-flight
 writer cannot undo an acknowledged exact deletion.
+
+Milestone 4 implements cache content and fenced leases in an optional Redis
+connection, while PostgreSQL stores durable tenant approval and invalidation
+generations. The request carries an explicit non-sensitive classification
+attestation; tenant approval is a separate audited operator decision, not an
+automatic classifier. The local synthetic tenant is approved only for its
+fixture workflow. Requests begun before invalidation may finish execution,
+but new-generation reads cannot see an old-generation write.
 
 Authenticated operator CLI commands initially manage exact-key invalidation and
 namespace generation. The CLI updates durable configuration and coordinates the

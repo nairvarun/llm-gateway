@@ -1,3 +1,4 @@
+from datetime import datetime
 from decimal import Decimal
 from typing import Annotated, Literal
 from uuid import UUID
@@ -25,6 +26,7 @@ class GenerateRequest(BaseModel):
     temperature: float = Field(default=0, ge=0, le=2, allow_inf_nan=False)
     max_output_tokens: int = Field(default=512, ge=1, le=16_384, strict=True)
     cache_mode: Literal["bypass", "read_only", "read_write"] = "bypass"
+    cache_classification: Literal["sensitive", "approved_non_sensitive"] = "sensitive"
     metadata: dict[MetadataKey, MetadataValue] = Field(default_factory=dict, max_length=20)
     idempotency_key: (
         Annotated[str, StringConstraints(strict=True, min_length=1, max_length=128)] | None
@@ -73,9 +75,10 @@ class ExecutionResponse(BaseModel):
     model: str
     finish_reason: FinishReason
     usage: UsageResponse
-    estimated_cost_usd: Decimal
+    estimated_cost_usd: Decimal = Field(examples=["0"])
     latency_ms: float
     cache_hit: bool = False
+    cache_status: Literal["bypass", "ineligible", "miss", "hit", "degraded"] = "bypass"
     idempotency_replayed: bool = False
     fallback_used: bool = False
     policy_version: str
@@ -105,3 +108,17 @@ class ErrorResponse(BaseModel):
 class HealthResponse(BaseModel):
     status: Literal["live", "ready", "not_ready"]
     components: dict[str, str] = Field(default_factory=dict)
+
+
+class SpendBucketResponse(BaseModel):
+    starts_at: datetime
+    limit_usd: Decimal = Field(examples=["10.00"])
+    committed_usd: Decimal = Field(examples=["0.00"])
+    held_usd: Decimal = Field(examples=["0.00"])
+    remaining_usd: Decimal = Field(examples=["10.00"])
+
+
+class SpendSummaryResponse(BaseModel):
+    tenant_id: UUID
+    day: SpendBucketResponse
+    month: SpendBucketResponse

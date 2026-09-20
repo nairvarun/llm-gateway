@@ -5,6 +5,7 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 from app.domain.models import (
+    BudgetExceeded,
     Dispatch,
     ExecutionSnapshot,
     FinishReason,
@@ -13,6 +14,8 @@ from app.domain.models import (
     JSONValue,
     Principal,
     RequestEvidence,
+    SpendBucketView,
+    SpendSummary,
     StateUnavailable,
     TokenUsage,
 )
@@ -40,6 +43,13 @@ class MemoryStore:
         self.usages: dict[UUID, TokenUsage] = {}
         self.attempts: dict[UUID, list[Dispatch]] = {}
         self.attempt_outcomes: dict[UUID, tuple[str, str | None, Decimal]] = {}
+        self.request_ceilings: dict[UUID, Decimal] = {}
+        self.daily_budget_usd = Decimal("10")
+        self.monthly_budget_usd = Decimal("100")
+        self.cache_allowed = True  # The test tenant uses only synthetic fixtures.
+        self.cache_namespace_generation = 1
+        self.cache_key_generations: dict[str, int] = {}
+        self.reserved_liability: dict[UUID, Decimal] = {}
         self.keyed: dict[
             tuple[UUID, str, str], tuple[str, UUID, str, bytes | None, datetime, datetime]
         ] = {}
@@ -209,6 +219,30 @@ class MemoryStore:
             else None
         )
 
+    async def cache_approved(self, principal: Principal) -> bool:
+        if not self.available:
+            raise StateUnavailable()
+        return self.cache_allowed and principal.tenant_id == self.principal.tenant_id
+
+    async def spend_summary(self, principal: Principal, tenant_id: UUID) -> SpendSummary:
+        from app.domain.errors import GatewayError
+
+        if principal.role != "operator" and tenant_id != principal.tenant_id:
+            raise GatewayError("FORBIDDEN", "Spend summary is unavailable in this scope.", 403)
+        today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+        month = today.replace(day=1)
+        held = sum(self.reserved_liability.values(), Decimal("0"))
+        return SpendSummary(
+            tenant_id,
+            SpendBucketView(today, self.daily_budget_usd, Decimal("0"), held),
+            SpendBucketView(month, self.monthly_budget_usd, Decimal("0"), held),
+        )
+
+    async def cache_generations(self, principal: Principal, key_hash: str) -> tuple[int, int]:
+        if not self.available:
+            raise StateUnavailable()
+        return self.cache_namespace_generation, self.cache_key_generations.get(key_hash, 1)
+
     async def begin(
         self,
         principal: Principal,
@@ -217,9 +251,14 @@ class MemoryStore:
         input_hash: str,
         schema_hash: str | None,
         snapshot: ExecutionSnapshot,
+        max_cost_usd: Decimal = Decimal("1"),
     ) -> Dispatch:
         if self.fail_begin:
             raise StateUnavailable()
+        if snapshot.estimated_max_cost_usd > min(
+            max_cost_usd, self.daily_budget_usd, self.monthly_budget_usd
+        ):
+            raise BudgetExceeded()
         self.records[request_id] = RequestEvidence(
             request_id,
             principal.tenant_id,
@@ -231,6 +270,8 @@ class MemoryStore:
         )
         dispatch = Dispatch(request_id, uuid4())
         self.attempts[request_id] = [dispatch]
+        self.request_ceilings[request_id] = max_cost_usd
+        self.reserved_liability[dispatch.attempt_id] = snapshot.estimated_max_cost_usd
         return dispatch
 
     async def add_attempt(
@@ -240,8 +281,12 @@ class MemoryStore:
             raise StateUnavailable()
         if number != len(self.attempts[request_id]) + 1:
             raise ValueError("Attempt number is not sequential")
+        spent = sum(self.reserved_liability[item.attempt_id] for item in self.attempts[request_id])
+        if spent + snapshot.estimated_max_cost_usd > self.request_ceilings[request_id]:
+            raise BudgetExceeded()
         dispatch = Dispatch(request_id, uuid4())
         self.attempts[request_id].append(dispatch)
+        self.reserved_liability[dispatch.attempt_id] = snapshot.estimated_max_cost_usd
         return dispatch
 
     async def settle_attempt(
@@ -257,6 +302,10 @@ class MemoryStore:
             raise StateUnavailable()
         self.usages[dispatch.attempt_id] = usage
         self.attempt_outcomes[dispatch.attempt_id] = (status, error_class, cost)
+        if status == "not_dispatched":
+            self.reserved_liability[dispatch.attempt_id] = Decimal("0")
+        elif usage.input_tokens is not None and usage.output_tokens is not None:
+            self.reserved_liability[dispatch.attempt_id] = cost
 
     async def complete_request(self, request_id: UUID, status: str, error_code: str | None) -> None:
         if self.fail_finish:
@@ -287,6 +336,33 @@ class MemoryStore:
             policy_version,
             error_code,
             routing_evidence,
+        )
+
+    async def record_cache_hit(
+        self,
+        principal: Principal,
+        request_id: UUID,
+        endpoint: str,
+        input_hash: str,
+        schema_hash: str | None,
+        snapshot: ExecutionSnapshot,
+        source_request_id: UUID,
+        max_cost_usd: Decimal,
+    ) -> None:
+        if self.fail_begin:
+            raise StateUnavailable()
+        self.records[request_id] = RequestEvidence(
+            request_id,
+            principal.tenant_id,
+            principal.application_id,
+            "completed",
+            snapshot.policy_version,
+            None,
+            {
+                **(snapshot.routing_evidence or {}),
+                "cache_hit": True,
+                "source_request_id": str(source_request_id),
+            },
         )
 
     async def finish(

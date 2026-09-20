@@ -33,10 +33,20 @@ class Settings(BaseSettings):
     default_request_cost_usd: Decimal = Field(default=Decimal("1"), gt=0)
     input_hash_key: SecretStr = Field(default_factory=lambda: SecretStr(secrets.token_hex(32)))
     replay_encryption_key: SecretStr | None = None
+    replay_retention_hours: int = Field(default=24, ge=1, le=24)
+    cache_encryption_key: SecretStr | None = None
+    cache_ttl_seconds: int = Field(default=3600, ge=1, le=3600)
+    cache_redis_url: SecretStr | None = None
+    metadata_retention_days: int = Field(default=30, ge=1, le=365)
 
     @field_validator("replay_encryption_key", mode="before")
     @classmethod
     def empty_replay_key_disabled(cls, value: object) -> object:
+        return None if value == "" else value
+
+    @field_validator("cache_encryption_key", "cache_redis_url", mode="before")
+    @classmethod
+    def empty_cache_setting_disabled(cls, value: object) -> object:
         return None if value == "" else value
 
     @field_validator("database_url")

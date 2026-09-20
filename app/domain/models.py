@@ -133,6 +133,21 @@ class RequestEvidence:
 
 
 @dataclass(frozen=True)
+class SpendBucketView:
+    starts_at: datetime
+    limit_usd: Decimal
+    committed_usd: Decimal
+    held_usd: Decimal
+
+
+@dataclass(frozen=True)
+class SpendSummary:
+    tenant_id: UUID
+    day: SpendBucketView
+    month: SpendBucketView
+
+
+@dataclass(frozen=True)
 class IdempotencyClaim:
     status: str
     original_request_id: UUID
@@ -175,6 +190,24 @@ class Store(Protocol):
 
     async def schema(self, principal: Principal, name: str, version: str) -> JSONSchema | None: ...
 
+    async def cache_approved(self, principal: Principal) -> bool: ...
+
+    async def cache_generations(self, principal: Principal, key_hash: str) -> tuple[int, int]: ...
+
+    async def record_cache_hit(
+        self,
+        principal: Principal,
+        request_id: UUID,
+        endpoint: str,
+        input_hash: str,
+        schema_hash: str | None,
+        snapshot: ExecutionSnapshot,
+        source_request_id: UUID,
+        max_cost_usd: Decimal,
+    ) -> None: ...
+
+    async def spend_summary(self, principal: Principal, tenant_id: UUID) -> SpendSummary: ...
+
     async def begin(
         self,
         principal: Principal,
@@ -183,6 +216,7 @@ class Store(Protocol):
         input_hash: str,
         schema_hash: str | None,
         snapshot: ExecutionSnapshot,
+        max_cost_usd: Decimal = Decimal("1"),
     ) -> Dispatch: ...
 
     async def reject_routing(
@@ -232,3 +266,7 @@ class Store(Protocol):
 
 class StateUnavailable(Exception):
     """Sanitized failure of correctness-critical storage."""
+
+
+class BudgetExceeded(Exception):
+    """A durable request or tenant allowance cannot fit another reservation."""

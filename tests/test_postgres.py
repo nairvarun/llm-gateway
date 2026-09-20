@@ -33,7 +33,7 @@ async def test_migration_and_immutable_versions(postgres: PostgresStore) -> None
     assert await postgres.ready()
     async with postgres.sessions() as session:
         revision = await session.scalar(text("SELECT version_num FROM alembic_version"))
-        assert revision == "0004_replay_recovery_index"
+        assert revision == "0006_cache_generations"
     async with postgres.sessions.begin() as session:
         with pytest.raises(DBAPIError):
             await session.execute(text("UPDATE configuration_versions SET version = 'v2'"))
@@ -108,7 +108,7 @@ async def test_http_revoked_and_disabled_tenants(postgres: PostgresStore) -> Non
     assert provider.invocations == 0
 
 
-@pytest.mark.parametrize("table", ["requests", "usage_events"])
+@pytest.mark.parametrize("table", ["requests", "spend_reservations", "usage_events"])
 async def test_critical_transaction_failure_never_dispatches_or_claims_success(
     postgres: PostgresStore, table: str
 ) -> None:
@@ -136,7 +136,7 @@ async def test_critical_transaction_failure_never_dispatches_or_claims_success(
             "/v1/generate", headers={"X-API-Key": key}, json={"input": "private synthetic test"}
         )
     assert response.status_code == 503
-    assert provider.invocations == (0 if table == "requests" else 1)
+    assert provider.invocations == (1 if table == "usage_events" else 0)
     assert "private synthetic test" not in response.text
     if table == "usage_events":
         assert response.json()["error"]["retryable"] is False
@@ -144,6 +144,9 @@ async def test_critical_transaction_failure_never_dispatches_or_claims_success(
             assert await session.scalar(select(func.count()).select_from(Attempt)) == 1
             record = await session.scalar(select(RequestRecord))
             assert record is not None and record.status == "in_progress"
+    if table == "spend_reservations":
+        async with postgres.sessions() as session:
+            assert await session.scalar(select(func.count()).select_from(Attempt)) == 0
 
 
 async def test_usage_event_uniqueness_and_idempotent_terminal_recording(

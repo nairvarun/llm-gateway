@@ -268,7 +268,7 @@ async def test_invalid_output_exhaustion_and_spend_precedence() -> None:
     request_id = uuid4()
     with pytest.raises(GatewayError) as blocked:
         await service(store, malformed).execute(
-            request.model_copy(update={"max_cost_usd": Decimal("0.002")}),
+            request.model_copy(update={"max_cost_usd": Decimal("0.001153")}),
             store.principal,
             request_id,
             0,
