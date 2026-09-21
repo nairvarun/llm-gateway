@@ -81,7 +81,7 @@ class PostgresStore:
         try:
             async with self.sessions() as session:
                 revision = await session.scalar(text("SELECT version_num FROM alembic_version"))
-                if revision != "0006_cache_generations":
+                if revision != "0009_ingress_scope":
                     return False
             await self.registry()
             return True
@@ -579,6 +579,7 @@ class PostgresStore:
                     IdempotencyIngress(
                         ingress_request_id=ingress_id,
                         tenant_id=principal.tenant_id,
+                        application_id=principal.application_id,
                         endpoint=endpoint,
                         original_request_id=row.original_request_id,
                         outcome=outcome,
@@ -656,6 +657,8 @@ class PostgresStore:
                     id=request_id,
                     tenant_id=principal.tenant_id,
                     application_id=principal.application_id,
+                    traffic_kind=principal.traffic_kind,
+                    evaluation_run_id=principal.evaluation_run_id,
                     endpoint=endpoint,
                     input_hash=input_hash,
                     schema_hash=schema_hash,
@@ -701,6 +704,8 @@ class PostgresStore:
                         id=request_id,
                         tenant_id=principal.tenant_id,
                         application_id=principal.application_id,
+                        traffic_kind=principal.traffic_kind,
+                        evaluation_run_id=principal.evaluation_run_id,
                         endpoint=endpoint,
                         input_hash=input_hash,
                         schema_hash=schema_hash,
@@ -738,6 +743,8 @@ class PostgresStore:
                         id=request_id,
                         tenant_id=principal.tenant_id,
                         application_id=principal.application_id,
+                        traffic_kind=principal.traffic_kind,
+                        evaluation_run_id=principal.evaluation_run_id,
                         endpoint=endpoint,
                         input_hash=input_hash,
                         schema_hash=schema_hash,

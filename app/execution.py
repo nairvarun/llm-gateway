@@ -36,6 +36,7 @@ from app.domain.routing import (
     RoutingDecision,
     maximum_cost,
 )
+from app.observability.telemetry import Telemetry
 
 
 @dataclass(frozen=True)
@@ -80,10 +81,12 @@ class AttemptExecutor:
         providers: dict[tuple[str, str], Provider],
         random: Random | None = None,
         control: Control | None = None,
+        telemetry: Telemetry | None = None,
     ) -> None:
         self.store, self.providers = store, providers
         self.random = random or Random()
         self.control = control
+        self.telemetry = telemetry
 
     async def run(
         self,
@@ -210,20 +213,27 @@ class AttemptExecutor:
                             candidate_deadline_excluded = True
                             raise DeadlineExpired()
                         invoked = True
-                        result = await deadline.run(
-                            partial(
-                                adapter.invoke,
-                                ProviderInput(
-                                    request.input,
-                                    request.task_type,
-                                    schema,
-                                    request.temperature,
-                                    request.max_output_tokens,
-                                    validation_retry,
-                                ),
+                        invoke = partial(
+                            adapter.invoke,
+                            ProviderInput(
+                                request.input,
+                                request.task_type,
+                                schema,
+                                request.temperature,
+                                request.max_output_tokens,
+                                validation_retry,
                             ),
-                            reserve_recording=True,
                         )
+                        if self.telemetry is not None:
+                            with self.telemetry.tracer.start_as_current_span(
+                                "gateway.provider_attempt"
+                            ) as span:
+                                span.set_attribute("gateway.request_id", str(request_id))
+                                span.set_attribute("gateway.attempt_id", str(dispatch.attempt_id))
+                                span.set_attribute("gateway.provider", candidate.provider)
+                                result = await deadline.run(invoke, reserve_recording=True)
+                        else:
+                            result = await deadline.run(invoke, reserve_recording=True)
                         usage, finish = result.usage, result.finish_reason
                         cost = self._observed_or_upper(model, usage, upper_cost)
                         output = result.output
@@ -350,6 +360,15 @@ class AttemptExecutor:
                     ) from error
                 usages.append(usage)
                 total_cost += cost
+                if self.telemetry is not None:
+                    self.telemetry.observe_attempt(
+                        status,
+                        usage,
+                        cost,
+                        attempt_number=attempts,
+                        fallback=candidate_index > 0,
+                        error_class=error_class,
+                    )
                 if status == "completed":
                     await self._complete(deadline, request_id, "completed", None)
                     assert finish is not None

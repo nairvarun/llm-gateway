@@ -122,3 +122,67 @@ class SpendSummaryResponse(BaseModel):
     tenant_id: UUID
     day: SpendBucketResponse
     month: SpendBucketResponse
+
+
+class EvaluationRunRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    dataset_name: ShortString
+    dataset_version: ShortString
+    model_ids: list[ShortString] = Field(min_length=1, max_length=4)
+    policy_version: ShortString
+    threshold_profile: ShortString
+
+
+class EvaluationCaseResponse(BaseModel):
+    case_id: str
+    model_id: str
+    status: Literal["queued", "running", "completed", "failed", "uncertain"]
+    request_id: UUID | None
+    error_code: str | None
+    score: dict[str, JsonValue] | None
+    latency_ms: Decimal | None = Field(default=None, examples=["12.500"])
+    estimated_cost_usd: Decimal | None = Field(default=None, examples=["0"])
+
+
+class EvaluationRunResponse(BaseModel):
+    run_id: UUID
+    status: Literal["queued", "running", "completed", "failed", "cancelled", "interrupted"]
+    dataset_name: str
+    dataset_version: str
+    dataset_sha256: str
+    model_ids: list[str]
+    policy_version: str
+    threshold_profile: str
+    threshold_sha256: str
+    code_revision: str
+    prompt_version: str
+    evaluator_version: str
+    pricing_versions: dict[str, str]
+    sampling_settings: dict[str, JsonValue]
+    model_revision_limitations: str
+    error_code: str | None
+    cases: list[EvaluationCaseResponse]
+    report: dict[str, JsonValue] | None = None
+
+
+class MetricsSummaryResponse(BaseModel):
+    starts_at: datetime
+    ends_at: datetime
+    traffic_kind: Literal["application", "evaluation"]
+    gateway_requests: int
+    completed_requests: int
+    success_rate: Decimal | None = Field(examples=["0.95"])
+    p50_latency_ms: Decimal | None = Field(examples=["25.0"])
+    p95_latency_ms: Decimal | None = Field(examples=["80.0"])
+    provider_attempts: int
+    provider_errors: int
+    retries: int
+    fallback_requests: int
+    fallback_rate: Decimal | None = Field(examples=["0"])
+    cache_hits: int
+    cache_hit_rate: Decimal | None = Field(examples=["0"])
+    idempotency_replays: int
+    input_tokens: int
+    output_tokens: int
+    estimated_fresh_cost_usd: Decimal = Field(examples=["0"])
+    unknown_usage_attempts: int

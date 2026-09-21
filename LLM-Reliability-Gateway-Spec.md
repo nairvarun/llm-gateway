@@ -1,12 +1,13 @@
 # LLM Reliability Gateway
 
-Status: full baseline proposed; milestones 1–4 implemented offline.
+Status: full baseline proposed; milestones 1–5 implemented offline.
 This is the entry point to the refined specification. See the
 [quickstart](docs/quickstart.md), [foundation evidence](docs/milestone-1-verification.md),
 and [routing evidence](docs/milestone-2-verification.md) and
 [reliability evidence](docs/milestone-3-verification.md), and
-[cache/budget evidence](docs/milestone-4-verification.md) for delivered behavior;
-later capabilities are not implemented. It supersedes the informal handoff preserved unchanged in
+[cache/budget evidence](docs/milestone-4-verification.md), and
+[evaluation evidence](docs/milestone-5-verification.md) for delivered behavior;
+authorized staging is not implemented. It supersedes the informal handoff preserved unchanged in
 [docs/reference/original-handoff.md](docs/reference/original-handoff.md).
 
 ## Objective
@@ -33,9 +34,9 @@ or unsupported resume claims.
   staging with security, deployment, and rollback evidence.
 
 These capabilities form the full baseline program, not the first milestone.
-The delivered first four milestones cover offline mock execution, fixture-tested
-provider routing, mock-backed reliability, atomic spend accounting, and exact
-cache; live execution is still disabled.
+The delivered first five milestones additionally cover synthetic evaluation,
+tenant-scoped summaries, bounded telemetry/alerts, and a measured local mock
+benchmark; live execution is still disabled.
 See the [roadmap](docs/roadmap.md) for incremental gates.
 
 ## Normative capability specifications
@@ -57,21 +58,21 @@ Its capability specs define planned observable behavior and testable scenarios:
 There are no durable capability specs under `openspec/specs/` yet. Do not sync
 or archive the initial program merely because its planning files validate.
 
-## Planned API surface
+## API surface
 
 - `POST /v1/generate`: normalized text response and current execution metadata.
 - `POST /v1/extract`: locally validated JSON under an inline or named versioned schema.
 - `GET /v1/spend`: authenticated current UTC tenant day/month allowance and liability.
-- `POST /v1/evaluations/runs`: authorized durable run creation.
-- `GET /v1/evaluations/runs/{run_id}`: run status, scores, gates, artifact references.
+- `POST /v1/evaluations/runs`: authorized durable synthetic run creation.
+- `GET /v1/evaluations/runs/{run_id}` and `/gate`: status, scores, and fail-closed comparison.
 - `GET /v1/metrics/summary`: authorized bounded-window operational summary.
 - `GET /health/live` and `GET /health/ready`: liveness and sanitized readiness.
 
 The service publishes wire types/defaults through OpenAPI at `/openapi.json`.
 Cache execution is opt-in and requires an approved non-sensitive classification;
 unavailable optional cache degrades only while critical controls remain healthy.
-Keyed replay requires a stable secret, and routing evidence uses the mock runtime
-while live dispatch and later capabilities remain gated. Capability specs
+Keyed replay requires a stable secret, and routing/evaluation evidence uses the
+mock runtime while live dispatch and staging remain gated. Capability specs
 are the behavior contract; the [design](openspec/changes/build-llm-reliability-gateway/design.md)
 records proposed stack, defaults, state ownership, and control paths. Configuration
 changes/invalidation initially use a validated authorized operator CLI; an
@@ -108,8 +109,9 @@ framework, fine-tuning, or universal provider/modality support is planned.
 Use the [milestone tasks](openspec/changes/build-llm-reliability-gateway/tasks.md)
 and [measurement plan](docs/roadmap.md). Release evidence must trace implemented
 behavior to capability scenarios, including failure cases, security boundaries,
-and an exercised staging rollback. Numeric performance/quality goals are targets
-until measured against a documented workload and approved gate profile.
+and an exercised staging rollback. The [local synthetic benchmark](docs/milestone-5-benchmark.md)
+reports measured outcomes and missed/unevaluable goals; it is not live-provider
+quality, cost, or staging performance evidence.
 
 `sources/` remains read-only synced reference material. No candidate resume is
 present. Any future project/resume summary must distinguish built behavior,

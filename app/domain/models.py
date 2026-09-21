@@ -98,6 +98,8 @@ class Principal:
     application_id: str
     credential_id: UUID
     role: str
+    traffic_kind: str = "application"
+    evaluation_run_id: UUID | None = None
 
 
 @dataclass(frozen=True)

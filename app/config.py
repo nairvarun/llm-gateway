@@ -1,6 +1,7 @@
 import secrets
 from decimal import Decimal
 from typing import Literal
+from urllib.parse import urlparse
 
 from pydantic import Field, SecretStr, ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -38,6 +39,32 @@ class Settings(BaseSettings):
     cache_ttl_seconds: int = Field(default=3600, ge=1, le=3600)
     cache_redis_url: SecretStr | None = None
     metadata_retention_days: int = Field(default=30, ge=1, le=365)
+    trace_sample_rate: float = Field(default=0.1, ge=0, le=1)
+    otlp_traces_endpoint: SecretStr | None = None
+
+    @field_validator("otlp_traces_endpoint", mode="before")
+    @classmethod
+    def empty_telemetry_disabled(cls, value: object) -> object:
+        return None if value == "" else value
+
+    @field_validator("otlp_traces_endpoint")
+    @classmethod
+    def valid_telemetry_endpoint(cls, value: SecretStr | None) -> SecretStr | None:
+        if value is not None:
+            parsed = urlparse(value.get_secret_value())
+            if parsed.scheme != "https" and not (
+                parsed.scheme == "http" and parsed.hostname in {"localhost", "127.0.0.1"}
+            ):
+                raise ValueError("OTLP traces require HTTPS or localhost HTTP")
+            if (
+                not parsed.netloc
+                or parsed.username
+                or parsed.password
+                or parsed.query
+                or parsed.fragment
+            ):
+                raise ValueError("OTLP traces endpoint must not contain credentials or query")
+        return value
 
     @field_validator("replay_encryption_key", mode="before")
     @classmethod

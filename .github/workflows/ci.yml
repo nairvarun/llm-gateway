@@ -30,23 +30,41 @@ jobs:
           --health-cmd "redis-cli ping"
           --health-interval 2s --health-timeout 2s --health-retries 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v6
         with:
           version: "0.12.13"
           python-version: "3.12"
           enable-cache: true
       - run: uv sync --frozen
+      - run: uv audit --locked
       - run: uv run ruff format --check app migrations tests deploy
       - run: uv run ruff check app migrations tests deploy
       - run: uv run mypy
+      - run: uv run pytest -q tests/test_openapi_compatibility.py tests/test_gates.py tests/test_alerts.py tests/test_benchmark.py
       - run: uv run pytest
+      - run: uv run python -m deploy.benchmark --output "$RUNNER_TEMP/benchmark.json"
+      - run: npm exec --yes --package=@fission-ai/openspec@1.13.0 -- openspec validate build-llm-reliability-gateway --strict --no-interactive
       - name: Build and smoke-test the offline container
         env:
           GATEWAY_POSTGRES_PORT: "55433"
+          GATEWAY_REDIS_PORT: "56380"
           GATEWAY_DATABASE_URL: postgresql+asyncpg://gateway:local-development-only@127.0.0.1:55433/gateway
         run: |
           docker compose up --build -d --wait
           uv run gateway seed-local
           uv run python -m deploy.smoke
+          EVAL_RUN_ID="$(uv run python -m deploy.evaluation_demo enqueue | jq -r .run_id)"
+          docker compose exec -T gateway gateway evaluate-worker --max-cases 100
+          uv run python -m deploy.evaluation_demo verify "$EVAL_RUN_ID"
           docker compose stop
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

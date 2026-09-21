@@ -1,0 +1,13 @@
+{
+  "version": "v1",
+  "content_sha256": "f3b10be7f8631d3df2cf03408982725059c7b759fcb7415dde215c65f0202cfe",
+  "rules": [
+    {"name": "elevated_failures", "signal": "failure_rate", "operator": "ge", "threshold": "0.10", "window_seconds": 300, "runbook": "docs/operations/alerts.md#elevated-failures"},
+    {"name": "high_latency", "signal": "p95_latency_ms", "operator": "ge", "threshold": "5000", "window_seconds": 300, "runbook": "docs/operations/alerts.md#high-latency"},
+    {"name": "high_spend", "signal": "daily_used_fraction", "operator": "ge", "threshold": "0.80", "window_seconds": 900, "runbook": "docs/operations/alerts.md#high-spend"},
+    {"name": "validation_failures", "signal": "validation_failure_rate", "operator": "ge", "threshold": "0.05", "window_seconds": 300, "runbook": "docs/operations/alerts.md#validation-failures"},
+    {"name": "open_circuits", "signal": "open_circuits", "operator": "ge", "threshold": "1", "window_seconds": 60, "runbook": "docs/operations/alerts.md#open-circuits"},
+    {"name": "exporter_loss", "signal": "exporter_failures", "operator": "ge", "threshold": "1", "window_seconds": 300, "runbook": "docs/operations/alerts.md#exporter-loss"},
+    {"name": "budget_exhaustion", "signal": "remaining_budget_fraction", "operator": "le", "threshold": "0.10", "window_seconds": 300, "runbook": "docs/operations/alerts.md#budget-exhaustion"}
+  ]
+}

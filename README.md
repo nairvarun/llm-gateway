@@ -4,13 +4,14 @@ A Python gateway project between applications and language-model providers,
 focused on bounded failures, validated output, explainable routing, spend
 accounting, and reproducible evaluation.
 
-Status: milestones 1–4 implemented offline. Authenticated mock generation,
+Status: milestones 1–5 implemented offline. Authenticated mock generation,
 schema-validated extraction, PostgreSQL evidence, two fixture-tested live-provider
 adapters, deterministic versioned routing, bounded retry/fallback, shared Redis
 admission/circuits, optional encrypted idempotency replay, atomic UTC spend
-reservations, and opt-in encrypted exact caching are available. The HTTP runtime
-remains mock-only. Evaluation execution, cloud deployment, and measured
-benchmarks remain future work.
+reservations, opt-in encrypted exact caching, synthetic evaluation/gates,
+tenant-scoped summaries, and bounded telemetry/alerts are available. The HTTP
+runtime remains mock-only. A small synthetic benchmark is published; live-model
+quality/cost, cloud deployment, and staging release evidence remain future work.
 
 ## Run the offline gateway
 
@@ -37,6 +38,8 @@ requires internet access. Use the Lima alternative if Docker is not installed.
 - [Routing verification](docs/milestone-2-verification.md)
 - [Reliability verification](docs/milestone-3-verification.md)
 - [Cache and budget verification](docs/milestone-4-verification.md)
+- [Evaluation and observability verification](docs/milestone-5-verification.md)
+- [Synthetic benchmark and raw evidence](docs/milestone-5-benchmark.md)
 - [Ordered learning checklist](docs/learning-checklist.md)
 - [Build proposal](openspec/changes/build-llm-reliability-gateway/proposal.md)
 - [Architecture and decisions](openspec/changes/build-llm-reliability-gateway/design.md)
@@ -52,10 +55,11 @@ AGENTS.md                       Agent workflow and safety constraints
 LLM-Reliability-Gateway-Spec.md  Scope and links to normative requirements
 README.md                       Entry point and current state
 pyproject.toml / uv.lock         Python package, checks, locked dependencies
-app/                            API/domain/adapters/routing/security/cache/usage implementation
+app/                            API/domain/adapters/routing/security/cache/usage/evaluation/telemetry
 tests/                          Unit/API/adapter and real-PostgreSQL checks
-migrations/                     Forward-only foundation, routing, replay, budget, cache migrations
-deploy/                         Bounded startup and offline smoke helpers
+migrations/                     Forward-only foundation through evaluation/ingress migrations
+datasets/                       Approved synthetic fixtures and threshold profile
+deploy/                         Bounded startup, smoke, evaluation and benchmark helpers
 Dockerfile / compose.yaml        Local service, PostgreSQL, and critical Redis
 .github/workflows/ci.yml         Offline checks and container smoke
 openspec/
@@ -74,6 +78,9 @@ docs/
   milestone-2-verification.md    Offline adapter/routing evidence and boundaries
   milestone-3-verification.md    Offline reliability evidence and boundaries
   milestone-4-verification.md    Offline budget/cache evidence and boundaries
+  milestone-5-verification.md    Offline evaluation/telemetry evidence and boundaries
+  milestone-5-benchmark.md       Synthetic workload, targets versus measured results
+  benchmark-evidence-v1.json     Sanitized per-case evidence and configuration
   provider-selection.md          Source-checked models, prices, and fixture provenance
   roadmap.md                    Delivery gates and benchmark methodology
   handoff-review.md             Provenance and reconciliation notes
@@ -81,9 +88,9 @@ docs/
 sources/                        Read-only synced references
 ```
 
-Dataset and infrastructure directories will be created when their milestones are
-implemented. Live-provider adapters exist but are not connected for paid execution;
-evaluation and cloud resources remain later work.
+Cloud infrastructure remains a later authorized milestone. Live-provider adapters
+exist but are not connected for paid execution; synthetic evaluation is not a
+live-model promotion approval.
 
 ## Planning workflow
 

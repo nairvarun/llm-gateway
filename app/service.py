@@ -34,6 +34,7 @@ from app.domain.routing import (
     sanitized_evidence,
 )
 from app.execution import AttemptExecutor
+from app.observability.telemetry import Telemetry
 from app.security.replay import ReplayCipher
 
 
@@ -48,6 +49,7 @@ class GatewayService:
         random: Random | None = None,
         control: Control | None = None,
         cache: Cache | None = None,
+        telemetry: Telemetry | None = None,
     ) -> None:
         self.settings, self.store, self.provider = settings, store, provider
         self.clock = clock or SystemClock()
@@ -55,7 +57,7 @@ class GatewayService:
             (provider.capabilities.provider, provider.capabilities.model): provider,
             **(providers or {}),
         }
-        self.executor = AttemptExecutor(store, self.providers, random, control)
+        self.executor = AttemptExecutor(store, self.providers, random, control, telemetry)
         self.cache = cache
         self.replay_cipher = (
             ReplayCipher(settings.replay_encryption_key.get_secret_value())

@@ -4,6 +4,7 @@ import json
 import math
 import os
 from dataclasses import asdict
+from decimal import Decimal
 from pathlib import Path
 from time import monotonic
 from urllib.parse import urlparse
@@ -16,6 +17,10 @@ from app import __version__
 from app.config import load_settings
 from app.domain.errors import GatewayError
 from app.domain.models import Principal, StateUnavailable
+from app.evaluation.repository import EvaluationRepository
+from app.evaluation.worker import run_worker
+from app.main import create_app
+from app.observability.alerts import evaluate_alerts, load_alerts
 from app.persistence.bootstrap import bootstrap_local, ensure_local_configuration
 from app.persistence.database import database_engine
 from app.persistence.store import PostgresStore
@@ -63,7 +68,7 @@ async def run(args: argparse.Namespace) -> None:
         if args.command == "wait-database":
             await wait_database(store, args.timeout)
             return
-        key_file = Path(args.key_file)
+        key_file = Path(getattr(args, "key_file", ".local/client-key"))
         if args.command == "seed-local":
             if urlparse(url).hostname not in {"127.0.0.1", "localhost", "postgres"}:
                 raise ValueError("Local bootstrap refuses a non-local database host")
@@ -144,6 +149,37 @@ async def run(args: argparse.Namespace) -> None:
             principal = await authenticate_file(store, key_file)
             counts = await store.purge_retention(principal, settings.metadata_retention_days)
             print(json.dumps(counts, sort_keys=True))
+        elif args.command == "evaluate-worker":
+            if settings.redis_url is None:
+                raise ValueError("Evaluation worker requires shared Redis admission controls")
+            application = create_app(settings, store=store)
+            async with application.router.lifespan_context(application):
+                completed = await run_worker(
+                    store, application.state.gateway_service, max_cases=args.max_cases
+                )
+            print(f"Offline evaluation worker processed {completed} cases.")
+        elif args.command == "review-generation":
+            principal = await authenticate_file(store, key_file)
+            await EvaluationRepository(store).review_generation(
+                principal, UUID(args.run_id), args.case_id, accepted=args.decision == "accept"
+            )
+            print("Human review recorded and audited.")
+        elif args.command == "approve-eval-baseline":
+            principal = await authenticate_file(store, key_file)
+            baseline_id = await EvaluationRepository(store).approve_baseline(
+                principal, UUID(args.run_id)
+            )
+            print(f"Immutable baseline {baseline_id} approved and audited.")
+        elif args.command == "evaluate-alerts":
+            file_path = Path(args.signals_file)
+            if (await asyncio.to_thread(file_path.stat)).st_size > 8192:
+                raise ValueError("Alert signal input exceeds 8 KiB")
+            raw = json.loads(await asyncio.to_thread(file_path.read_text, encoding="utf-8"))
+            if not isinstance(raw, dict) or not isinstance(raw.get("signals"), dict):
+                raise ValueError("Invalid alert signal input")
+            signals = {str(key): Decimal(str(value)) for key, value in raw["signals"].items()}
+            alert_result = evaluate_alerts(load_alerts(), signals, args.observation_seconds)
+            print(json.dumps(alert_result, sort_keys=True))
     finally:
         await engine.dispose()
 
@@ -213,12 +249,33 @@ def main() -> None:
         "purge-retention", help="Delete expired protected content and metadata"
     )
     purge.add_argument("--key-file", default=".local/operator-key")
+    worker = commands.add_parser(
+        "evaluate-worker", help="Process queued synthetic evaluations in a separate process"
+    )
+    worker.add_argument("--max-cases", type=int, default=100)
+    review = commands.add_parser(
+        "review-generation", help="Audit a human rubric decision for one synthetic case"
+    )
+    review.add_argument("run_id")
+    review.add_argument("case_id")
+    review.add_argument("decision", choices=["accept", "reject"])
+    review.add_argument("--key-file", default=".local/operator-key")
+    baseline = commands.add_parser(
+        "approve-eval-baseline", help="Approve one complete synthetic run as an immutable baseline"
+    )
+    baseline.add_argument("run_id")
+    baseline.add_argument("--key-file", default=".local/operator-key")
+    alerts = commands.add_parser(
+        "evaluate-alerts", help="Evaluate sanitized window signals against offline alert rules"
+    )
+    alerts.add_argument("signals_file")
+    alerts.add_argument("--observation-seconds", type=int, default=900)
     args = parser.parse_args()
     try:
         asyncio.run(run(args))
     except GatewayError as error:
         parser.exit(1, f"{error.code}: {error.message}\n")
-    except (SQLAlchemyError, OSError, ValueError, StateUnavailable):
+    except (SQLAlchemyError, OSError, ValueError, RuntimeError, StateUnavailable):
         parser.exit(
             1,
             "Local operation failed. Check database availability, migrations, "

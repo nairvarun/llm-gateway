@@ -59,15 +59,15 @@ Coverage: `response-cache`, full `usage-budgets`, and protected retention in
 Coverage: `evaluation-observability` and CI/secret checks in
 `deployment-security`.
 
-- [ ] 5.1 Create approved synthetic/sanitized versioned dataset manifests with easy, ambiguous, malformed, long-context, and adversarial cases; verify immutable hashes, schema checks, and no personal/secret data.
-- [ ] 5.2 Add durable run/case records, authorized run APIs, and a separately launched runner; verify 202/status lifecycle, cross-tenant denial, restart/interruption handling, and no uncertain-case redispatch.
-- [ ] 5.3 Implement extraction/classification scorers and a documented generation rubric/human-review record; verify fixture scores and inclusion of failures/timeouts in published denominators.
-- [ ] 5.4 Add version-complete reports and configurable baseline/threshold profiles; verify quality/cost/latency comparisons, missing-evidence blocking, mutable-model limitations, and failed gates retaining the prior policy.
-- [ ] 5.5 Add bounded-cardinality metrics, sanitized structured logs, and correlated traces; verify exporter outages do not break valid responses and sampled-out requests retain durable correlation evidence.
-- [ ] 5.6 Implement authorized time-window summaries separating attempts, cache/replay, and evaluation traffic; verify summary denominators and fresh-spend totals against known fixtures.
-- [ ] 5.7 Add alert rules/observation windows and runbooks for failure/latency/spend/validation/circuit/exporter/budget signals; verify scripted incidents produce the expected alert evidence and recovery instructions.
-- [ ] 5.8 Connect offline evaluation/compatibility/dependency/secret gates to CI and expand the quickstart/demo; verify a credential-free checkout demonstrates evaluation regression failure and required checks never silently pass without evidence.
-- [ ] 5.9 Run the documented benchmark workload (live only if explicitly authorized), store raw sanitized evidence/configuration, and publish targets versus results; verify every reported number is reproducible and unsupported resume claims remain absent.
+- [x] 5.1 Create approved synthetic/sanitized versioned dataset manifests with easy, ambiguous, malformed, long-context, and adversarial cases; verify immutable hashes, schema checks, and no personal/secret data.
+- [x] 5.2 Add durable run/case records, authorized run APIs, and a separately launched runner; verify 202/status lifecycle, cross-tenant denial, restart/interruption handling, and no uncertain-case redispatch.
+- [x] 5.3 Implement extraction/classification scorers and a documented generation rubric/human-review record; verify fixture scores and inclusion of failures/timeouts in published denominators.
+- [x] 5.4 Add version-complete reports and configurable baseline/threshold profiles; verify quality/cost/latency comparisons, missing-evidence blocking, mutable-model limitations, and failed gates retaining the prior policy.
+- [x] 5.5 Add bounded-cardinality metrics, sanitized structured logs, and correlated traces; verify exporter outages do not break valid responses and sampled-out requests retain durable correlation evidence.
+- [x] 5.6 Implement authorized time-window summaries separating attempts, cache/replay, and evaluation traffic; verify summary denominators and fresh-spend totals against known fixtures.
+- [x] 5.7 Add alert rules/observation windows and runbooks for failure/latency/spend/validation/circuit/exporter/budget signals; verify scripted incidents produce the expected alert evidence and recovery instructions.
+- [x] 5.8 Connect offline evaluation/compatibility/dependency/secret gates to CI and expand the quickstart/demo; verify a credential-free checkout demonstrates evaluation regression failure and required checks never silently pass without evidence.
+- [x] 5.9 Run the documented benchmark workload (live only if explicitly authorized), store raw sanitized evidence/configuration, and publish targets versus results; verify every reported number is reproducible and unsupported resume claims remain absent.
 
 ## 6. Authorized staging — deployment and release evidence
 

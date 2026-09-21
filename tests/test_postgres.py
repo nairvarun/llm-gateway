@@ -33,7 +33,7 @@ async def test_migration_and_immutable_versions(postgres: PostgresStore) -> None
     assert await postgres.ready()
     async with postgres.sessions() as session:
         revision = await session.scalar(text("SELECT version_num FROM alembic_version"))
-        assert revision == "0006_cache_generations"
+        assert revision == "0009_ingress_scope"
     async with postgres.sessions.begin() as session:
         with pytest.raises(DBAPIError):
             await session.execute(text("UPDATE configuration_versions SET version = 'v2'"))

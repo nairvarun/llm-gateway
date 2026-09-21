@@ -80,6 +80,8 @@ class RequestRecord(Base):
     id: Mapped[UUID] = mapped_column(primary_key=True)
     tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id"), index=True)
     application_id: Mapped[str] = mapped_column(String(100))
+    traffic_kind: Mapped[str] = mapped_column(String(16), default="application")
+    evaluation_run_id: Mapped[UUID | None] = mapped_column(index=True)
     endpoint: Mapped[str] = mapped_column(String(50))
     status: Mapped[str] = mapped_column(String(16), default="in_progress")
     input_hash: Mapped[str] = mapped_column(String(64))
@@ -204,6 +206,7 @@ class IdempotencyIngress(Base):
     __tablename__ = "idempotency_ingress"
     ingress_request_id: Mapped[UUID] = mapped_column(primary_key=True)
     tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id"))
+    application_id: Mapped[str] = mapped_column(String(100), default="legacy-unknown")
     endpoint: Mapped[str] = mapped_column(String(50))
     original_request_id: Mapped[UUID]
     outcome: Mapped[str] = mapped_column(String(32))
@@ -217,3 +220,84 @@ class AuditEvent(Base):
     action: Mapped[str] = mapped_column(String(100))
     target_id: Mapped[str] = mapped_column(String(100))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class EvaluationDataset(Base):
+    __tablename__ = "evaluation_datasets"
+    __table_args__ = (UniqueConstraint("name", "version"),)
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    name: Mapped[str] = mapped_column(String(64))
+    version: Mapped[str] = mapped_column(String(16))
+    content_sha256: Mapped[str] = mapped_column(String(64))
+    case_count: Mapped[int]
+    provenance: Mapped[str] = mapped_column(String(200))
+    approved: Mapped[bool] = mapped_column(default=True)
+
+
+class EvaluationRun(Base):
+    __tablename__ = "evaluation_runs"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('queued', 'running', 'completed', 'failed', 'cancelled', 'interrupted')"
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id"), index=True)
+    application_id: Mapped[str] = mapped_column(String(100))
+    credential_id: Mapped[UUID] = mapped_column(ForeignKey("credentials.id"))
+    dataset_id: Mapped[UUID] = mapped_column(ForeignKey("evaluation_datasets.id"))
+    dataset_sha256: Mapped[str] = mapped_column(String(64))
+    model_ids: Mapped[list[str]] = mapped_column(JSONB)
+    policy_id: Mapped[UUID] = mapped_column(ForeignKey("configuration_versions.id"))
+    policy_version: Mapped[str] = mapped_column(String(100))
+    threshold_profile: Mapped[str] = mapped_column(String(100))
+    threshold_sha256: Mapped[str] = mapped_column(String(64))
+    code_revision: Mapped[str] = mapped_column(String(64))
+    prompt_version: Mapped[str] = mapped_column(String(100))
+    evaluator_version: Mapped[str] = mapped_column(String(100))
+    pricing_versions: Mapped[dict[str, str]] = mapped_column(JSONB)
+    sampling_settings: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    model_revision_limitations: Mapped[str] = mapped_column(String(200))
+    status: Mapped[str] = mapped_column(String(16), default="queued")
+    error_code: Mapped[str | None] = mapped_column(String(50))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class EvaluationCase(Base):
+    __tablename__ = "evaluation_cases"
+    __table_args__ = (
+        UniqueConstraint("run_id", "case_id", "model_id"),
+        CheckConstraint("status IN ('queued', 'running', 'completed', 'failed', 'uncertain')"),
+    )
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    run_id: Mapped[UUID] = mapped_column(ForeignKey("evaluation_runs.id"), index=True)
+    case_id: Mapped[str] = mapped_column(String(64))
+    case_sha256: Mapped[str] = mapped_column(String(64))
+    model_id: Mapped[str] = mapped_column(String(100))
+    status: Mapped[str] = mapped_column(String(16), default="queued")
+    request_id: Mapped[UUID | None] = mapped_column(unique=True)
+    error_code: Mapped[str | None] = mapped_column(String(50))
+    score: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    latency_ms: Mapped[Decimal | None] = mapped_column(Numeric(20, 3))
+    estimated_cost_usd: Mapped[Decimal | None] = mapped_column(Numeric(20, 10))
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class EvaluationBaseline(Base):
+    __tablename__ = "evaluation_baselines"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "application_id", "dataset_id", "profile_sha256"),
+    )
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id"))
+    application_id: Mapped[str] = mapped_column(String(100))
+    dataset_id: Mapped[UUID] = mapped_column(ForeignKey("evaluation_datasets.id"))
+    profile_sha256: Mapped[str] = mapped_column(String(64))
+    run_id: Mapped[UUID] = mapped_column(ForeignKey("evaluation_runs.id"), unique=True)
+    actor_id: Mapped[UUID] = mapped_column(ForeignKey("credentials.id"))
+    approved_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )

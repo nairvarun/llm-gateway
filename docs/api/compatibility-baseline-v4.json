@@ -1,0 +1,31 @@
+{
+  "baseline": "offline-milestone-4",
+  "paths": {
+    "/v1/generate": {"method": "post", "success": "200", "request": "GenerateRequest", "response": "GenerateResponse"},
+    "/v1/extract": {"method": "post", "success": "200", "request": "ExtractRequest", "response": "ExtractResponse"},
+    "/v1/spend": {"method": "get", "success": "200", "response": "SpendSummaryResponse"},
+    "/health/live": {"method": "get", "success": "200", "response": "HealthResponse"},
+    "/health/ready": {"method": "get", "success": "200", "response": "HealthResponse"}
+  },
+  "request_schemas": {
+    "GenerateRequest": {
+      "required": ["input"],
+      "fields": ["input", "model_policy", "quality_tier", "task_type", "latency_budget_ms", "max_cost_usd", "temperature", "max_output_tokens", "cache_mode", "cache_classification", "metadata", "idempotency_key"],
+      "enums": {
+        "cache_mode": ["bypass", "read_only", "read_write"],
+        "quality_tier": ["economy", "standard", "high"],
+        "task_type": ["generation", "extraction", "classification", "summarization"]
+      }
+    },
+    "ExtractRequest": {
+      "required": ["input"],
+      "fields": ["input", "json_schema", "schema_name", "schema_version", "model_policy", "quality_tier", "latency_budget_ms", "max_cost_usd", "temperature", "max_output_tokens", "cache_mode", "cache_classification", "metadata", "idempotency_key"]
+    }
+  },
+  "response_schemas": {
+    "GenerateResponse": ["request_id", "provider", "model", "finish_reason", "usage", "estimated_cost_usd", "latency_ms", "policy_version", "output", "cache_status", "original_request_id"],
+    "ExtractResponse": ["request_id", "provider", "model", "finish_reason", "usage", "estimated_cost_usd", "latency_ms", "policy_version", "output", "cache_status", "original_request_id"],
+    "SpendSummaryResponse": ["tenant_id", "day", "month"],
+    "ErrorResponse": ["error", "request_id", "original_request_id"]
+  }
+}

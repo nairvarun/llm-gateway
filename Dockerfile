@@ -7,9 +7,11 @@ ENV UV_LINK_MODE=copy PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 COPY app ./app
+COPY datasets ./datasets
 COPY migrations ./migrations
 COPY alembic.ini ./
 COPY deploy/start.sh ./deploy/start.sh
+COPY deploy/alert-rules-v1.json ./deploy/alert-rules-v1.json
 RUN uv sync --frozen --no-dev && useradd --uid 10001 --create-home gateway
 ENV PATH="/service/.venv/bin:$PATH"
 USER gateway

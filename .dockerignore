@@ -1,10 +1,13 @@
 **
 !app/
 !app/**
+!datasets/
+!datasets/**
 !migrations/
 !migrations/**
 !deploy/
 !deploy/start.sh
+!deploy/alert-rules-v1.json
 !pyproject.toml
 !uv.lock
 !alembic.ini

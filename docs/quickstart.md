@@ -1,9 +1,9 @@
-# Offline quickstart (milestones 1–4)
+# Offline quickstart (milestones 1–5)
 
 This runs the offline service: authenticated generation, locally validated
 extraction, a deterministic mock, versioned routing, bounded retries, shared
 Redis controls, optional keyed replay, atomic spend reservations, opt-in exact
-cache, and durable PostgreSQL evidence. No paid
+cache, synthetic evaluation/summary/telemetry, and durable PostgreSQL evidence. No paid
 provider/AWS account is needed. Internet access is needed initially to download
 Python packages and container images; provider invocations themselves are offline.
 
@@ -253,6 +253,39 @@ until their separate backup lifecycle expires; this local repo does not configur
 that lifecycle. Do not claim production erasure from the purge command alone.
 See [milestone 4 evidence](milestone-4-verification.md).
 
+## Synthetic evaluation and observability
+
+The checked-in `synthetic-gateway@v1` dataset contains only synthetic cases.
+The API queues a run with `POST /v1/evaluations/runs`, returns 202, and exposes
+tenant-scoped run/case status and a fail-closed comparison at
+`GET /v1/evaluations/runs/{run_id}/gate`. The worker is a separate explicitly
+launched process, not an API background task. With the local container running:
+
+```sh
+uv run python -m deploy.evaluation_demo enqueue
+docker compose exec -T gateway gateway evaluate-worker --max-cases 100
+uv run python -m deploy.evaluation_demo verify RUN_ID_FROM_ENQUEUE
+```
+
+For Lima replace `docker compose exec -T gateway` with
+`limactl shell default nerdctl exec llm-gateway-foundation-gateway-1`.
+The verify step requires all seven cases to complete and a `blocked` gate with
+`missing_approved_baseline`; it does not promote a policy. The approved
+threshold profile additionally requires human review and task quality. An
+interrupted claimed case is marked uncertain rather than blindly dispatched
+again. Operator-only `gateway review-generation` and
+`gateway approve-eval-baseline` require a trusted key and sufficient evidence;
+do not approve the deliberately failing demo to make a gate pass.
+
+`GET /v1/metrics/summary` returns bounded UTC windows for the authenticated
+tenant/application and separates application from evaluation traffic. The
+operator-only `/metrics` endpoint has bounded labels. Optional OpenTelemetry
+export failure does not turn valid work into an error; durable request IDs remain
+available. See [alert rules/runbooks](operations/alerts.md) and
+[evaluation/observability evidence](milestone-5-verification.md).
+The [synthetic benchmark](milestone-5-benchmark.md) publishes raw sanitized
+evidence and limitations; no live-model quality or cost saving is established.
+
 Request evidence includes status/identity/policy/routing/error metadata, never raw input
 or output. Keys are verification hashes in PostgreSQL. Input hashes use a keyed
 HMAC; set a private `GATEWAY_INPUT_HASH_KEY` for stable hashes across restarts,
@@ -267,6 +300,7 @@ uv run ruff format --check app migrations tests deploy
 uv run ruff check app migrations tests deploy
 uv run mypy
 uv run pytest
+uv audit --locked
 openspec validate build-llm-reliability-gateway --strict --no-interactive
 ```
 

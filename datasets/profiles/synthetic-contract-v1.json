@@ -1,0 +1,18 @@
+{
+  "name": "synthetic-contract",
+  "version": "v1",
+  "dataset_name": "synthetic-gateway",
+  "dataset_version": "v1",
+  "approved": true,
+  "content_sha256": "aece67f7adfad15a85f6a50d4f50c26d292093cb1131c97e8ee2a8a7425f36d7",
+  "parameters": {
+    "minimum_extraction_validity": "0.60",
+    "minimum_extraction_field_accuracy": "0.60",
+    "minimum_classification_f1": "0.95",
+    "maximum_p95_latency_ms": "10000",
+    "maximum_estimated_cost_usd": "1.00",
+    "maximum_cost_ratio_to_baseline": "1.10",
+    "maximum_accuracy_drop": "0.02",
+    "require_human_generation_review": true
+  }
+}

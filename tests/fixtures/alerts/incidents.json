@@ -1,0 +1,21 @@
+{
+  "observation_seconds": 900,
+  "signals": {
+    "failure_rate": "0.25",
+    "p95_latency_ms": "6500",
+    "daily_used_fraction": "0.85",
+    "validation_failure_rate": "0.07",
+    "open_circuits": "2",
+    "exporter_failures": "1",
+    "remaining_budget_fraction": "0.05"
+  },
+  "expected": [
+    "elevated_failures",
+    "high_latency",
+    "high_spend",
+    "validation_failures",
+    "open_circuits",
+    "exporter_loss",
+    "budget_exhaustion"
+  ]
+}
