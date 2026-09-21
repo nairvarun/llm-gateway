@@ -31,7 +31,8 @@ staging SLO. The active program change remains open.
   incident fixtures. CI requires the full PostgreSQL/Redis suite, OpenAPI
   compatibility, failing-evidence gates, alert/benchmark checks, dependency
   audit, secret scan, strict OpenSpec validation, and a container evaluation
-  demo. Local execution of these commands does not prove remote Actions ran.
+  demo. The [pushed Actions run](https://github.com/gultandon/Llm-gateway/actions/runs/35554858934)
+  completed successfully (offline-gateway and secret-scan jobs).
 
 ## Evidence
 
@@ -49,8 +50,9 @@ staging SLO. The active program change remains open.
 
 The browser was not given a private API key. Terminal/container demonstrations
 used a generated local synthetic tenant key; no paid provider credentials,
-cloud resources, or live model calls were used. Remote CI results must be
-checked separately after push.
+cloud resources, or live model calls were used. The passing remote CI run uses
+its own fresh service containers and local synthetic credentials; it does not
+authorize staging or paid calls.
 
 ## Remaining gates
 

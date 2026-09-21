@@ -2,12 +2,13 @@ schema: spec-driven
 
 context: |
   This is the LLM Reliability Gateway repository, a greenfield Python backend
-  project derived from an informal portfolio-project handoff. Milestones 1–4
+  project derived from an informal portfolio-project handoff. Milestones 1–5
   have an offline mock-backed API, schema validation, hashed authentication,
   fixture-tested provider adapters, versioned routing, bounded reliability,
-  PostgreSQL budget reservations, and opt-in encrypted exact cache. Live
-  dispatch, evaluation execution, measured benchmark results, and cloud
-  deployment remain gated. Use the quickstart and milestone verification
+  PostgreSQL budget reservations, opt-in encrypted exact cache, synthetic
+  evaluation, bounded telemetry, and a local mock benchmark. Live provider
+  dispatch, live-model benchmark evidence, and cloud deployment remain gated.
+  Use the quickstart and milestone verification
   documents to distinguish delivered behavior from planned requirements.
   Target stack: Python 3.12, FastAPI, Pydantic, asyncio, PostgreSQL, Redis,
   SQLAlchemy/Alembic, pytest, Ruff, mypy, OpenTelemetry, Docker, and Terraform.
@@ -18,7 +19,8 @@ context: |
   The original handoff is historical reference, not the authoritative contract.
   Requirements under active changes describe planned behavior. Durable specs
   should not be presented as implemented until the associated work is verified.
-  Metrics are targets until a reproducible benchmark supplies evidence.
+  The synthetic benchmark supports only its published local workload; live
+  quality/cost targets and staging SLOs remain unmeasured.
 
 rules:
   proposal:
