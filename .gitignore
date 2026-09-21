@@ -22,6 +22,7 @@ dist/
 
 # Local generated runtime/benchmark content, not approved versioned datasets.
 .local/
+infra/terraform/backend.tf
 artifacts/
 *.log
 .DS_Store
@@ -31,5 +32,7 @@ artifacts/
 *.tfstate
 *.tfstate.*
 *.tfplan
+*.tfvars
+!*.tfvars.example
 crash.log
 # Intentionally track .terraform.lock.hcl when infrastructure is introduced.

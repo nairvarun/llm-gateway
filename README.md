@@ -10,7 +10,8 @@ adapters, deterministic versioned routing, bounded retry/fallback, shared Redis
 admission/circuits, optional encrypted idempotency replay, atomic UTC spend
 reservations, opt-in encrypted exact caching, synthetic evaluation/gates,
 tenant-scoped summaries, and bounded telemetry/alerts are available. The HTTP
-runtime remains mock-only. A small synthetic benchmark is published; live-model
+runtime remains mock-only. A small synthetic benchmark is published. Milestone
+6 Terraform has a read-only AWS plan, but no resource has been applied; live-model
 quality/cost, cloud deployment, and staging release evidence remain future work.
 
 ## Run the offline gateway
@@ -40,6 +41,7 @@ requires internet access. Use the Lima alternative if Docker is not installed.
 - [Cache and budget verification](docs/milestone-4-verification.md)
 - [Evaluation and observability verification](docs/milestone-5-verification.md)
 - [Synthetic benchmark and raw evidence](docs/milestone-5-benchmark.md)
+- [Staging Terraform plan and unresolved gates](docs/staging-plan-review.md)
 - [Ordered learning checklist](docs/learning-checklist.md)
 - [Build proposal](openspec/changes/build-llm-reliability-gateway/proposal.md)
 - [Architecture and decisions](openspec/changes/build-llm-reliability-gateway/design.md)
@@ -61,6 +63,7 @@ migrations/                     Forward-only foundation through evaluation/ingre
 datasets/                       Approved synthetic fixtures and threshold profile
 deploy/                         Bounded startup, smoke, evaluation and benchmark helpers
 Dockerfile / compose.yaml        Local service, PostgreSQL, and critical Redis
+infra/terraform/                Unapplied AWS staging and state-bucket bootstrap
 .github/workflows/ci.yml         Offline checks and container smoke
 openspec/
   config.yaml                   Planning context and artifact rules
@@ -88,7 +91,7 @@ docs/
 sources/                        Read-only synced references
 ```
 
-Cloud infrastructure remains a later authorized milestone. Live-provider adapters
+Cloud infrastructure is planned but not applied. Live-provider adapters
 exist but are not connected for paid execution; synthetic evaluation is not a
 live-model promotion approval.
 

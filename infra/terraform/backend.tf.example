@@ -1,0 +1,5 @@
+# Activate only after the separately planned bootstrap state bucket exists.
+# Copy this file to backend.tf, then initialize with the reviewed bucket/key.
+terraform {
+  backend "s3" {}
+}

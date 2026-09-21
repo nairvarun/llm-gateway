@@ -20,8 +20,11 @@ secret and explicit approved non-sensitive classification. Live adapter dispatch
 remains disabled pending separate owner authorization and a recorded spend ceiling;
 passing offline evaluation gates does not itself authorize paid calls. A small
 synthetic benchmark is measured; do not generalize it to live quality/cost or
-staging performance. Do not describe later infrastructure or targets as working
-or verified. The resume
+staging performance. Milestone 6 has an unapplied Terraform staging/state-bucket
+design and account-specific review plans; read `docs/staging-plan-review.md`
+before cloud work. Planning does not authorize `terraform apply`, image push,
+deployment, or live-provider spend. Do not describe later infrastructure or
+targets as working or verified. The resume
 mentioned in the old instructions is not present; do not invent its contents.
 
 ## Read first and resolve conflicts
@@ -86,6 +89,9 @@ historical example or a benchmark target.
   metrics exporters are best effort. Document dependency failure behavior.
 - Never spend on live providers, provision cloud resources, or deploy without
   an explicit request covering that action.
+- Terraform apply requires a separate explicit owner approval after review of
+  the exact account-specific plan. Re-plan after activating remote state or
+  changing any input; a saved local-backend plan is not deployment approval.
 
 ## Validation and handoff
 
