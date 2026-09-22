@@ -10,6 +10,7 @@ COPY app ./app
 COPY datasets ./datasets
 COPY migrations ./migrations
 COPY alembic.ini ./
+COPY deploy/__init__.py deploy/smoke.py ./deploy/
 COPY deploy/start.sh ./deploy/start.sh
 COPY deploy/alert-rules-v1.json ./deploy/alert-rules-v1.json
 RUN uv sync --frozen --no-dev && useradd --uid 10001 --create-home gateway

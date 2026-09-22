@@ -135,3 +135,43 @@ async def bootstrap_local(store: PostgresStore, *, role: str = "tenant") -> tupl
             )
         )
     return key, Principal(tenant_id, "local-demo", credential_id, role)
+
+
+async def bootstrap_staging_smoke(store: PostgresStore, key: str) -> Principal:
+    """Register one externally generated staging smoke credential without persisting it."""
+    if not key.startswith("gw_") or not 32 <= len(key) <= 128:
+        raise ValueError("Staging smoke key has an invalid format")
+    key_hash = hash_api_key(key)
+    async with store.sessions.begin() as session:
+        await _ensure_mock_configuration(session)
+        existing = await session.scalar(select(Credential).where(Credential.key_hash == key_hash))
+        if existing is not None:
+            return Principal(
+                existing.tenant_id,
+                existing.application_id,
+                existing.id,
+                existing.role,
+            )
+
+        tenant_id, credential_id = uuid4(), uuid4()
+        session.add(Tenant(id=tenant_id, name="Synthetic staging smoke", cache_approved=False))
+        await session.flush()
+        session.add(
+            Credential(
+                id=credential_id,
+                tenant_id=tenant_id,
+                application_id="staging-smoke",
+                key_hash=key_hash,
+                role="tenant",
+            )
+        )
+        session.add(
+            SchemaVersion(
+                tenant_id=tenant_id,
+                name="demo-count",
+                version="v1",
+                payload=DEMO_SCHEMA,
+                content_hash=content_hash(DEMO_SCHEMA),
+            )
+        )
+    return Principal(tenant_id, "staging-smoke", credential_id, "tenant")

@@ -16,7 +16,10 @@ resource "aws_subnet" "public" {
   availability_zone       = each.key
   cidr_block              = each.value
   map_public_ip_on_launch = false
-  tags                    = { Name = "${var.name}-public-${each.key}" }
+  tags = {
+    Name                     = "${var.name}-public-${each.key}"
+    "kubernetes.io/role/elb" = "1"
+  }
 }
 
 resource "aws_subnet" "app" {
@@ -25,7 +28,10 @@ resource "aws_subnet" "app" {
   availability_zone       = each.key
   cidr_block              = each.value
   map_public_ip_on_launch = false
-  tags                    = { Name = "${var.name}-app-${each.key}" }
+  tags = {
+    Name                              = "${var.name}-app-${each.key}"
+    "kubernetes.io/role/internal-elb" = "1"
+  }
 }
 
 resource "aws_subnet" "data" {
@@ -76,104 +82,43 @@ resource "aws_route_table_association" "data" {
   route_table_id = aws_route_table.data.id
 }
 
-resource "aws_security_group" "alb" {
-  name_prefix = "${var.name}-alb-"
-  description = "Staging HTTPS ingress only"
-  vpc_id      = aws_vpc.staging.id
-}
-
-resource "aws_security_group" "app" {
-  name_prefix = "${var.name}-app-"
-  description = "Private ECS tasks"
-  vpc_id      = aws_vpc.staging.id
-}
-
 resource "aws_security_group" "database" {
   name_prefix = "${var.name}-db-"
-  description = "PostgreSQL from ECS tasks only"
+  description = "PostgreSQL from EKS managed nodes only"
   vpc_id      = aws_vpc.staging.id
 }
 
 resource "aws_security_group" "redis" {
   name_prefix = "${var.name}-redis-"
-  description = "Redis TLS from ECS tasks only"
+  description = "Redis TLS from EKS managed nodes only"
   vpc_id      = aws_vpc.staging.id
 }
 
 resource "aws_security_group" "endpoints" {
   name_prefix = "${var.name}-endpoints-"
-  description = "AWS PrivateLink from ECS tasks only"
+  description = "AWS PrivateLink from EKS managed nodes only"
   vpc_id      = aws_vpc.staging.id
 }
 
-resource "aws_vpc_security_group_ingress_rule" "alb_https" {
-  security_group_id = aws_security_group.alb.id
-  cidr_ipv4         = "0.0.0.0/0"
-  ip_protocol       = "tcp"
-  from_port         = 443
-  to_port           = 443
-  description       = "Public TLS endpoint only"
-}
-
-resource "aws_vpc_security_group_egress_rule" "alb_to_app" {
-  security_group_id            = aws_security_group.alb.id
-  referenced_security_group_id = aws_security_group.app.id
-  ip_protocol                  = "tcp"
-  from_port                    = 8000
-  to_port                      = 8000
-}
-
-resource "aws_vpc_security_group_ingress_rule" "app_from_alb" {
-  security_group_id            = aws_security_group.app.id
-  referenced_security_group_id = aws_security_group.alb.id
-  ip_protocol                  = "tcp"
-  from_port                    = 8000
-  to_port                      = 8000
-}
-
-resource "aws_vpc_security_group_ingress_rule" "db_from_app" {
+resource "aws_vpc_security_group_ingress_rule" "db_from_eks" {
   security_group_id            = aws_security_group.database.id
-  referenced_security_group_id = aws_security_group.app.id
+  referenced_security_group_id = aws_eks_cluster.staging.vpc_config[0].cluster_security_group_id
   ip_protocol                  = "tcp"
   from_port                    = 5432
   to_port                      = 5432
 }
 
-resource "aws_vpc_security_group_egress_rule" "app_to_db" {
-  security_group_id            = aws_security_group.app.id
-  referenced_security_group_id = aws_security_group.database.id
-  ip_protocol                  = "tcp"
-  from_port                    = 5432
-  to_port                      = 5432
-}
-
-resource "aws_vpc_security_group_ingress_rule" "redis_from_app" {
+resource "aws_vpc_security_group_ingress_rule" "redis_from_eks" {
   security_group_id            = aws_security_group.redis.id
-  referenced_security_group_id = aws_security_group.app.id
+  referenced_security_group_id = aws_eks_cluster.staging.vpc_config[0].cluster_security_group_id
   ip_protocol                  = "tcp"
   from_port                    = 6379
   to_port                      = 6379
 }
 
-resource "aws_vpc_security_group_egress_rule" "app_to_redis" {
-  security_group_id            = aws_security_group.app.id
-  referenced_security_group_id = aws_security_group.redis.id
-  ip_protocol                  = "tcp"
-  from_port                    = 6379
-  to_port                      = 6379
-}
-
-resource "aws_vpc_security_group_ingress_rule" "endpoint_from_app" {
+resource "aws_vpc_security_group_ingress_rule" "endpoint_from_eks" {
   security_group_id            = aws_security_group.endpoints.id
-  referenced_security_group_id = aws_security_group.app.id
-  ip_protocol                  = "tcp"
-  from_port                    = 443
-  to_port                      = 443
-}
-
-resource "aws_vpc_security_group_egress_rule" "app_to_endpoints" {
-  security_group_id            = aws_security_group.app.id
-  referenced_security_group_id = aws_security_group.endpoints.id
+  referenced_security_group_id = aws_eks_cluster.staging.vpc_config[0].cluster_security_group_id
   ip_protocol                  = "tcp"
   from_port                    = 443
   to_port                      = 443
@@ -196,12 +141,4 @@ resource "aws_vpc_endpoint" "s3" {
   vpc_endpoint_type = "Gateway"
   route_table_ids   = [aws_route_table.app.id]
   tags              = { Name = "${var.name}-s3" }
-}
-
-resource "aws_vpc_security_group_egress_rule" "app_to_s3" {
-  security_group_id = aws_security_group.app.id
-  prefix_list_id    = aws_vpc_endpoint.s3.prefix_list_id
-  ip_protocol       = "tcp"
-  from_port         = 443
-  to_port           = 443
 }

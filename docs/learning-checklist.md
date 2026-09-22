@@ -13,7 +13,7 @@ I treat your resume as your stated background, not an independent assessment of 
 | Python, automation, Flask APIs, direct HTTP/API work | Read the service and build adapters | Async execution, type contracts, FastAPI/Pydantic |
 | SQL, MySQL, RDS | Understand entities and queries | PostgreSQL transactions, async SQLAlchemy, migrations, concurrent correctness |
 | Fallbacks in automation systems | Recognize partial failure | Deadline and attempt bounds, uncertain execution, shared controls |
-| AWS, Docker, Terraform, CI/CD | Run local dependencies; later understand deployment | Long-running ECS service operations and safe schema/policy rollback |
+| AWS, Docker, Terraform, CI/CD | Run local dependencies; later understand deployment | EKS operations and safe schema/policy rollout/rollback |
 | CloudWatch and structured logging | Diagnose requests and failures | Traces, bounded metric labels, reproducible LLM evaluations |
 
 Skip beginner Python, SQL, REST, Docker, and AWS courses unless the practical checks reveal a gap. Your resume does not establish experience with asyncio, LLM APIs, Redis coordination, or evaluation; those get explicit checklist items.
@@ -194,11 +194,11 @@ You can now contribute to the foundation. Choose a small change and use the rema
 
 ### 17. [ ] Container service deployment and safe rollback — later
 
-**Learn:** The differences between your Lambda experience and a long-running ECS Fargate service: ALB readiness, graceful shutdown, connection pools, private RDS/Redis, external secrets, runner/artifact access, immutable image identity, and resource limits. Learn expand/contract migrations, image/policy rollback, backups/restore, smoke tests, and dependency-outage/load exercises.
+**Learn:** The differences between your Lambda experience and a long-running EKS workload: cluster/access management, scheduling, health probes, graceful shutdown, Pod Identity, CSI-mounted external secrets, NetworkPolicies, connection pools, private RDS/Redis, immutable image identity, resources/disruption budgets, and node/add-on upgrades. Learn expand/contract migrations, image/policy rollout rollback, backups/restore, smoke tests, and dependency-outage/load exercises.
 
 **Why:** Deploying an old image does not reverse a database migration. Staging needs evidence that data compatibility and privacy survive failure and recovery.
 
-**Resources:** [ECS rolling deployments](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/deployment-type-ecs.html); design migration plan; tasks 6.1–6.7; [deployment contract](../openspec/changes/build-llm-reliability-gateway/specs/deployment-security/spec.md). Refresh the AWS services you already know only where the design differs.
+**Resources:** [EKS deployment runbook](eks-deployment.md); design migration plan; tasks 6.1–6.7; [deployment contract](../openspec/changes/build-llm-reliability-gateway/specs/deployment-security/spec.md). Refresh the AWS services you already know only where the design differs.
 
 **Enough when:** You can review a diagram and infrastructure plan explaining trust boundaries, costs, secrets, readiness, and rollback compatibility. A local image/policy rollback demonstrates preserved evidence. Cloud acceptance additionally requires explicitly authorized staging smoke, load, outage, restore, and rollback evidence; reading docs or passing Terraform validation is not that evidence. You can begin interviews before this milestone. Do not provision or make live provider calls merely to satisfy a learning checkbox.
 
@@ -223,4 +223,4 @@ For features you have not built, describe the planned design and its risks plain
 
 ## Topics to leave out of this learning path
 
-Transformer mathematics, model training/fine-tuning, GPU serving, RAG/vector databases, agent frameworks, semantic caching, streaming, Kubernetes, microservice decomposition, and multi-region failover are not baseline requirements. Add them only for a separately chosen role or future project extension. This project's immediate learning value comes from API contracts, async execution, failure handling, concurrent correctness, and defensible evidence.
+Transformer mathematics, model training/fine-tuning, GPU serving, RAG/vector databases, agent frameworks, semantic caching, streaming, Kubernetes operator development, microservice decomposition, and multi-region failover are not baseline requirements. Add them only for a separately chosen role or future project extension. This project's immediate learning value comes from API contracts, async execution, failure handling, concurrent correctness, EKS workload operations, and defensible evidence.

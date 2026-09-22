@@ -41,3 +41,30 @@ def test_startup_migration_control(
     )
     assert result.returncode == expected_returncode
     assert trace.read_text().splitlines() == expected_commands
+
+
+def test_startup_requires_complete_tls_file_pair(tmp_path: Path) -> None:
+    trace = tmp_path / "commands.txt"
+    for command in ("gateway", "uvicorn"):
+        executable = tmp_path / command
+        executable.write_text(f"#!/bin/sh\nprintf '{command}\\n' >> \"$STARTUP_TRACE\"\n")
+        executable.chmod(0o755)
+
+    environment = os.environ.copy()
+    environment["PATH"] = f"{tmp_path}:{environment['PATH']}"
+    environment["STARTUP_TRACE"] = str(trace)
+    environment["GATEWAY_RUN_MIGRATIONS"] = "false"
+    environment["GATEWAY_TLS_CERT_FILE"] = "/mounted/tls-cert"
+    environment.pop("GATEWAY_TLS_KEY_FILE", None)
+
+    result = subprocess.run(
+        ["sh", "deploy/start.sh"],
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert "Both GATEWAY_TLS_CERT_FILE" in result.stderr
+    assert trace.read_text().splitlines() == ["gateway"]

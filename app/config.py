@@ -1,9 +1,10 @@
 import secrets
 from decimal import Decimal
+from pathlib import Path
 from typing import Literal
 from urllib.parse import urlparse
 
-from pydantic import Field, SecretStr, ValidationError, field_validator
+from pydantic import Field, SecretStr, ValidationError, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.providers.mock import SCENARIOS
@@ -16,6 +17,7 @@ class Settings(BaseSettings):
     database_url: SecretStr = SecretStr(
         "postgresql+asyncpg://gateway:local-development-only@127.0.0.1:55432/gateway"
     )
+    database_url_file: Path | None = Field(default=None, repr=False)
     database_schema: str = Field(default="public", pattern=r"^[a-z][a-z0-9_]{0,62}$")
     redis_url: SecretStr | None = None
     tenant_concurrency: int = Field(default=8, ge=1, le=1000)
@@ -33,14 +35,48 @@ class Settings(BaseSettings):
     schema_max_depth: int = Field(default=16, ge=1, le=16)
     default_request_cost_usd: Decimal = Field(default=Decimal("1"), gt=0)
     input_hash_key: SecretStr = Field(default_factory=lambda: SecretStr(secrets.token_hex(32)))
+    input_hash_key_file: Path | None = Field(default=None, repr=False)
     replay_encryption_key: SecretStr | None = None
+    replay_encryption_key_file: Path | None = Field(default=None, repr=False)
     replay_retention_hours: int = Field(default=24, ge=1, le=24)
     cache_encryption_key: SecretStr | None = None
+    cache_encryption_key_file: Path | None = Field(default=None, repr=False)
     cache_ttl_seconds: int = Field(default=3600, ge=1, le=3600)
     cache_redis_url: SecretStr | None = None
     metadata_retention_days: int = Field(default=30, ge=1, le=365)
     trace_sample_rate: float = Field(default=0.1, ge=0, le=1)
     otlp_traces_endpoint: SecretStr | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def load_file_backed_secrets(cls, values: object) -> object:
+        if not isinstance(values, dict):
+            return values
+
+        file_settings = {
+            "database_url_file": "database_url",
+            "input_hash_key_file": "input_hash_key",
+            "replay_encryption_key_file": "replay_encryption_key",
+            "cache_encryption_key_file": "cache_encryption_key",
+        }
+        resolved = dict(values)
+        for file_field, value_field in file_settings.items():
+            raw_path = resolved.get(file_field)
+            if raw_path is None or raw_path == "":
+                continue
+            try:
+                if not isinstance(raw_path, (str, Path)):
+                    raise TypeError("secret file path must be a string or path")
+                path = Path(raw_path)
+                if path.stat().st_size > 65_536:
+                    raise ValueError("secret file is too large")
+                secret_value = path.read_text(encoding="utf-8").rstrip("\r\n")
+            except (OSError, TypeError, UnicodeError, ValueError):
+                raise ValueError(f"Unable to load {value_field} from its secret file") from None
+            if not secret_value:
+                raise ValueError(f"The {value_field} secret file is empty")
+            resolved[value_field] = secret_value
+        return resolved
 
     @field_validator("otlp_traces_endpoint", mode="before")
     @classmethod
@@ -96,6 +132,9 @@ def load_settings() -> Settings:
         return Settings()
     except ValidationError as error:
         fields = ", ".join(
-            sorted(str(item["loc"][0]) for item in error.errors(include_input=False))
+            sorted(
+                str(item["loc"][0]) if item["loc"] else "configuration"
+                for item in error.errors(include_input=False)
+            )
         )
         raise ValueError(f"Invalid GATEWAY_ configuration fields: {fields}.") from None

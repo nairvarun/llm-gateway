@@ -163,13 +163,16 @@ resource "aws_ecr_lifecycle_policy" "gateway" {
   })
 }
 
-resource "aws_cloudwatch_log_group" "gateway" {
-  name              = "/ecs/${var.name}"
-  retention_in_days = var.log_retention_days
-}
-
 resource "aws_secretsmanager_secret" "app" {
-  for_each                = toset(["database-url", "replay-key", "cache-key", "input-hash-key"])
+  for_each = toset([
+    "database-url",
+    "replay-key",
+    "cache-key",
+    "input-hash-key",
+    "smoke-client-key",
+    "tls-cert",
+    "tls-key",
+  ])
   name                    = "${var.name}/${each.key}"
   description             = "Operator-supplied staging secret; Terraform never stores its value"
   recovery_window_in_days = 30

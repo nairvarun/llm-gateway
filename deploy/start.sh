@@ -16,4 +16,11 @@ case "${GATEWAY_RUN_MIGRATIONS:-true}" in
     exit 1
     ;;
 esac
-exec uvicorn app.main:create_app --factory --host 0.0.0.0 --port 8000 --no-access-log
+set -- uvicorn app.main:create_app --factory --host 0.0.0.0 --port 8000 --no-access-log
+if [ -n "${GATEWAY_TLS_CERT_FILE:-}" ] && [ -n "${GATEWAY_TLS_KEY_FILE:-}" ]; then
+  set -- "$@" --ssl-certfile "$GATEWAY_TLS_CERT_FILE" --ssl-keyfile "$GATEWAY_TLS_KEY_FILE"
+elif [ -n "${GATEWAY_TLS_CERT_FILE:-}" ] || [ -n "${GATEWAY_TLS_KEY_FILE:-}" ]; then
+  echo "Both GATEWAY_TLS_CERT_FILE and GATEWAY_TLS_KEY_FILE are required for TLS." >&2
+  exit 1
+fi
+exec "$@"

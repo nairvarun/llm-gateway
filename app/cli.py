@@ -21,7 +21,11 @@ from app.evaluation.repository import EvaluationRepository
 from app.evaluation.worker import run_worker
 from app.main import create_app
 from app.observability.alerts import evaluate_alerts, load_alerts
-from app.persistence.bootstrap import bootstrap_local, ensure_local_configuration
+from app.persistence.bootstrap import (
+    bootstrap_local,
+    bootstrap_staging_smoke,
+    ensure_local_configuration,
+)
 from app.persistence.database import database_engine
 from app.persistence.store import PostgresStore
 from app.security.auth import hash_api_key
@@ -84,6 +88,12 @@ async def run(args: argparse.Namespace) -> None:
             )
             await asyncio.to_thread(write_private_key, key_file, key)
             print(f"Local credential stored privately in {key_file}; tenant {principal.tenant_id}.")
+        elif args.command == "bootstrap-staging-smoke":
+            if (await asyncio.to_thread(key_file.stat)).st_size > 512:
+                raise ValueError("Staging smoke key file is too large")
+            key = (await asyncio.to_thread(key_file.read_text)).strip()
+            principal = await bootstrap_staging_smoke(store, key)
+            print(f"Staging smoke credential verified for tenant {principal.tenant_id}.")
         elif args.command == "inspect-request":
             principal = await authenticate_file(store, key_file)
             evidence = await store.evidence(principal, UUID(args.request_id))
@@ -197,6 +207,11 @@ def main() -> None:
     )
     seed.add_argument("--key-file", default=".local/client-key")
     seed.add_argument("--operator", action="store_true")
+    staging_seed = commands.add_parser(
+        "bootstrap-staging-smoke",
+        help="Register an externally generated synthetic staging smoke credential",
+    )
+    staging_seed.add_argument("--key-file", required=True)
     inspect = commands.add_parser(
         "inspect-request", help="Read privacy-safe authorized request evidence"
     )

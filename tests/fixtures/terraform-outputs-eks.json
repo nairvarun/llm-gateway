@@ -1,0 +1,29 @@
+{
+  "region": {"value": "ap-south-1"},
+  "vpc_cidr": {"value": "10.86.0.0/16"},
+  "kubernetes_namespace": {"value": "llm-gateway"},
+  "runtime_image_repository": {
+    "value": "365712037872.dkr.ecr.ap-south-1.amazonaws.com/llm-gateway-staging"
+  },
+  "runtime_secret_names": {
+    "value": {
+      "database-url": "llm-gateway-staging/database-url",
+      "replay-key": "llm-gateway-staging/replay-key",
+      "cache-key": "llm-gateway-staging/cache-key",
+      "input-hash-key": "llm-gateway-staging/input-hash-key",
+      "smoke-client-key": "llm-gateway-staging/smoke-client-key",
+      "tls-cert": "llm-gateway-staging/tls-cert",
+      "tls-key": "llm-gateway-staging/tls-key"
+    }
+  },
+  "runtime_config": {
+    "value": {
+      "GATEWAY_PROVIDER": "mock",
+      "GATEWAY_REDIS_URL": "rediss://cache.internal:6379",
+      "GATEWAY_CACHE_REDIS_URL": "rediss://cache.internal:6379",
+      "GATEWAY_REPLAY_RETENTION_HOURS": "24",
+      "GATEWAY_CACHE_TTL_SECONDS": "3600",
+      "GATEWAY_METADATA_RETENTION_DAYS": "30"
+    }
+  }
+}

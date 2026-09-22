@@ -24,9 +24,9 @@ interval, or live-model calibration is claimed. Timing numbers vary by host/load
 
 | Condition | Successful / all | Mock invocations | Exact hits | p95 end-to-end | p95 gateway overhead |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Direct fixed mock | 8 / 14 | 14 | 0 | 0.086 ms | 0 ms (not a gateway) |
-| Gateway, cache bypass | 8 / 14 | 14 | 0 | 52.870 ms | 52.857 ms |
-| Gateway, repeated exact cache | 8 / 14 | 10 | 4 / 14 | 31.727 ms | 31.717 ms |
+| Direct fixed mock | 8 / 14 | 14 | 0 | 0.089 ms | 0 ms (not a gateway) |
+| Gateway, cache bypass | 8 / 14 | 14 | 0 | 53.614 ms | 53.597 ms |
+| Gateway, repeated exact cache | 8 / 14 | 10 | 4 / 14 | 45.302 ms | 45.288 ms |
 
 The repeated-cache workload recorded four hits (28.6%) and improved aggregate
 p95 latency against bypass in this run; this single small sample is sensitive to
@@ -41,7 +41,7 @@ baseline, and no provider invoice was measured.
 | Handoff aspiration | This measured workload | Interpretation |
 | --- | --- | --- |
 | >=99% extraction validity | 40% | Not met; deliberately adverse fixture and mock limitation |
-| <100 ms p95 gateway overhead | 52.857 ms bypass; 31.717 ms cached | Met only on this small local sequential mock run; not a staging SLO |
+| <100 ms p95 gateway overhead | 53.597 ms bypass; 45.288 ms cached | Met only on this small local sequential mock run; not a staging SLO |
 | >=20% lower inference cost at equal quality | Both mock paths USD 0 | Not measurable with free synthetic pricing |
 | >=25% exact hits on declared repeats | 4/14 = 28.6% | Met only on this repeated synthetic mix |
 | >=99% recovery on defined transient faults | Not in this workload | Covered separately by fault tests, not benchmarked here |

@@ -1,0 +1,74 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gateway-smoke
+  namespace: __KUBERNETES_NAMESPACE__
+  labels:
+    app.kubernetes.io/name: gateway-smoke
+    app.kubernetes.io/component: verification
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 300
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: gateway-smoke
+        app.kubernetes.io/component: verification
+    spec:
+      restartPolicy: Never
+      serviceAccountName: gateway-smoke
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: smoke
+          image: __IMAGE_URI__
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-ec"]
+          args:
+            - >-
+              gateway bootstrap-staging-smoke --key-file /mnt/smoke/client-key &&
+              python -m deploy.smoke
+          env:
+            - name: GATEWAY_PROVIDER
+              value: mock
+            - name: GATEWAY_DATABASE_URL_FILE
+              value: /mnt/smoke/database-url
+            - name: GATEWAY_SMOKE_URL
+              value: https://gateway.__KUBERNETES_NAMESPACE__.svc.cluster.local
+            - name: GATEWAY_SMOKE_KEY_FILE
+              value: /mnt/smoke/client-key
+            - name: GATEWAY_SMOKE_CA_FILE
+              value: /mnt/smoke/tls-cert
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          volumeMounts:
+            - name: smoke-secrets
+              mountPath: /mnt/smoke
+              readOnly: true
+            - name: temporary
+              mountPath: /tmp
+      volumes:
+        - name: smoke-secrets
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: gateway-smoke
+        - name: temporary
+          emptyDir: {}

@@ -48,6 +48,32 @@ async def test_local_bootstrap_is_repeatable_and_does_not_print_key(
         assert await session.scalar(select(func.count()).select_from(Credential)) == 1
 
 
+@pytest.mark.integration
+async def test_staging_smoke_bootstrap_registers_external_key_idempotently(
+    postgres: PostgresStore,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    async with postgres.engine.connect() as connection:
+        schema = await connection.scalar(text("SELECT current_schema()"))
+    monkeypatch.setenv("GATEWAY_DATABASE_SCHEMA", str(schema))
+    monkeypatch.setenv(
+        "GATEWAY_DATABASE_URL", str(postgres.engine.url.render_as_string(hide_password=False))
+    )
+    external_key = "gw_" + "staging-smoke-synthetic-key-0123456789"
+    key_file = tmp_path / "staging-smoke-key"
+    key_file.write_text(external_key, encoding="utf-8")
+    args = argparse.Namespace(command="bootstrap-staging-smoke", key_file=str(key_file))
+
+    await run(args)
+    await run(args)
+
+    assert external_key not in capsys.readouterr().out
+    async with postgres.sessions() as session:
+        assert await session.scalar(select(func.count()).select_from(Credential)) == 1
+
+
 async def test_startup_wait_is_bounded() -> None:
     engine = database_engine(
         "postgresql+asyncpg://gateway:local-development-only@127.0.0.1:1/gateway"

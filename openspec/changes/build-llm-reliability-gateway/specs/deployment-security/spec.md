@@ -61,13 +61,19 @@ respect authenticated tenant scope and privileged audit requirements.
 - **WHEN** a cache or idempotency result reaches its content-retention limit
 - **THEN** protected content is deleted or made unreadable and the documented replay/expiry semantics apply without serving expired personal data
 
-### Requirement: Reviewed staging infrastructure and rollback
+### Requirement: Reviewed EKS staging infrastructure and rollback
 
 Infrastructure SHALL be reproducible from documented Terraform/configuration,
 with a reviewed plan, least-privilege roles, private data services, external
 secrets, bounded log/artifact retention, and environment-specific spend controls.
-Staging promotion SHALL require immutable image identity, migration checks,
-smoke tests, evaluation/security evidence, and a documented rollback exercise.
+The staging runtime SHALL use AWS EKS with private worker nodes, Kubernetes
+service accounts mapped to least-privilege AWS permissions, namespace-scoped
+workloads, health probes, resource requests/limits, disruption-safe rollout
+settings, and encrypted ingress. Database migrations SHALL run as an explicit
+bounded Kubernetes Job before API promotion; application pods SHALL NOT run
+migrations concurrently. Staging promotion SHALL require immutable image identity,
+migration checks, smoke tests, evaluation/security evidence, and a documented
+Kubernetes rollout rollback exercise.
 Cloud provisioning/live-provider execution SHALL require explicit owner
 authorization and SHALL not be an automatic consequence of a local test.
 
@@ -75,3 +81,8 @@ authorization and SHALL not be an automatic consequence of a local test.
 
 - **WHEN** a new image or policy fails the required staging checks
 - **THEN** promotion is blocked and the documented prior image/policy recovery is exercised without destructive schema rollback
+
+#### Scenario: Kubernetes workload lacks required identity or secrets
+
+- **WHEN** a gateway pod cannot assume its approved service-account identity or retrieve its required external secrets
+- **THEN** the pod fails readiness and no fallback node credential, embedded secret, or broadened IAM permission is used

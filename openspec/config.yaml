@@ -12,7 +12,8 @@ context: |
   documents to distinguish delivered behavior from planned requirements.
   Target stack: Python 3.12, FastAPI, Pydantic, asyncio, PostgreSQL, Redis,
   SQLAlchemy/Alembic, pytest, Ruff, mypy, OpenTelemetry, Docker, and Terraform.
-  AWS ECS Fargate is the proposed deployment target, not an existing environment.
+  AWS EKS is the selected staging target with an unapplied account-specific
+  Terraform plan and unexercised Kubernetes manifests, not an existing environment.
   Keep provider SDKs behind provider-neutral adapters. Prefer one service and
   deterministic, configuration-driven policies before adaptive routing.
   sources/ contains read-only synced references; never mutate its contents.

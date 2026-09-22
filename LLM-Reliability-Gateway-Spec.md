@@ -7,7 +7,7 @@ and [routing evidence](docs/milestone-2-verification.md) and
 [reliability evidence](docs/milestone-3-verification.md), and
 [cache/budget evidence](docs/milestone-4-verification.md), and
 [evaluation evidence](docs/milestone-5-verification.md) for delivered behavior;
-authorized staging is not implemented. It supersedes the informal handoff preserved unchanged in
+authorized EKS staging is designed but not applied. It supersedes the informal handoff preserved unchanged in
 [docs/reference/original-handoff.md](docs/reference/original-handoff.md).
 
 ## Objective
@@ -100,8 +100,10 @@ does not. The [handoff review](docs/handoff-review.md) explains these refinement
 
 Semantic caching requires a separate quality/privacy contract and benchmark.
 Streaming, OpenAI-compatible chat, adaptive/canary routing, queue-backed batch
-workers, multi-region failover, dashboard UI, formal SLOs, and Kubernetes are
-extensions, not baseline requirements. No general RAG platform, autonomous-agent
+workers, multi-region failover, dashboard UI, and formal SLOs are not baseline
+application requirements; EKS is now the selected staging runtime,
+while multi-cluster portability and Kubernetes operator development remain
+extensions. No general RAG platform, autonomous-agent
 framework, fine-tuning, or universal provider/modality support is planned.
 
 ## Delivery and evidence

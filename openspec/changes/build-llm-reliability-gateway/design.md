@@ -4,8 +4,9 @@ See [proposal.md](proposal.md) for motivation and capability scope. At proposal
 creation the repository had no application code or API/data migrations. Milestone
 1 now supplies the offline foundation; see [its verification report](../../../docs/milestone-1-verification.md).
 Milestones 2–5 now add offline routing, reliability, budgets, exact-cache,
-synthetic evaluation, and bounded observability evidence. Deployment decisions
-remain planned. The historical handoff
+synthetic evaluation, and bounded observability evidence. The owner subsequently
+selected AWS EKS, replacing the earlier ECS/Fargate staging assumption; deployment
+evidence remains planned. The historical handoff
 is preserved in [the reference snapshot](../../../docs/reference/original-handoff.md).
 The capability files under `specs/` describe the full planned contract; only
 checked tasks have implementation evidence.
@@ -61,6 +62,7 @@ datasets/           Synthetic/approved versioned cases and manifests
 migrations/         Forward-compatible schema changes
 deploy/             Local/staging configuration and smoke scripts
 infra/terraform/    Reviewed AWS infrastructure
+deploy/kubernetes/  Versioned EKS workload configuration and rollout helpers
 ```
 
 ### 2. Explicit API and safe defaults
@@ -285,6 +287,45 @@ days. Make these configurable, document deletion/backup limitations, and test
 expiry. No production-content sampling in the baseline; online/debug sampling
 requires explicit owner policy approval and sanitized bounded artifacts.
 
+### 9. EKS staging with separate infrastructure and workload convergence
+
+Use Terraform for the account-bound VPC, EKS control plane and managed node
+group, IAM/access entries, private PostgreSQL/Redis, VPC endpoints, artifact
+storage, ECR, external secret containers, logs, and budget alert. Run worker
+nodes only in private application subnets. Keep the Kubernetes API private by
+default; any temporary public administrative endpoint requires an explicit,
+bounded CIDR and a reviewed plan. Use EKS access entries for operator access and
+a dedicated service account with workload-scoped AWS permissions rather than
+node-role credentials.
+
+Keep cluster creation and in-cluster workload convergence as explicit stages.
+Terraform SHALL NOT store application secret values or require a Kubernetes
+provider to reach a not-yet-created private API during the infrastructure apply.
+Version Kubernetes manifests in the repository, render them with an immutable
+ECR image digest and externally populated Secrets Manager values, validate them offline, and
+apply them only after the cluster, nodes, data services, access entry, secrets,
+and image are ready. Pin the EKS/Kubernetes version and add-on versions that are
+supported in the reviewed region; upgrades require a separate plan and skew
+review.
+
+Use a namespace-scoped API Deployment and ClusterIP Service. Configure startup,
+readiness, and liveness probes; resource requests/limits; non-root/restricted
+security contexts; a PodDisruptionBudget; topology spread; rolling-update
+availability; and default-deny NetworkPolicies with only DNS, PostgreSQL,
+Redis, and AWS private endpoints allowed. Run Alembic
+as a separate bounded Job before promotion. Run evaluation workers as explicit
+Jobs rather than a continuously restarting Deployment. Initially expose the API
+only as a private ClusterIP Service with TLS terminated in the gateway pod from
+CSI-mounted certificate material. An AWS load balancer, public/private DNS, and
+their controller IAM/network paths require a separate reviewed design. Keep
+live-provider internet egress absent until a separate paid-execution design is
+authorized.
+
+Alternative: retain ECS Fargate. The owner selected Kubernetes/EKS to make
+orchestration, rollout, workload identity, and policy boundaries first-class
+portfolio evidence. This adds control-plane/node/add-on cost and operational
+surface; staging evidence must not be described as production maturity.
+
 ## Risks / Trade-offs
 
 - [Conservative reservations reject affordable requests] --> Prefer bounded
@@ -309,9 +350,10 @@ adapters/routing, reliability, cache/accounting, evaluation, and authorized stag
 in the milestone order in `tasks.md`. Minimal durable accounting is required
 before any live-provider attempt; budget/correctness is not postponed to a demo.
 
-For staging, use the handoff's ECS Fargate/ALB, private RDS/ElastiCache, S3,
-Secrets Manager, IAM, and Terraform approach. Review plans and cost limits before
-apply. Pin image digests and active policy versions. Prefer expand/contract
+For staging, use EKS managed nodes, private RDS/ElastiCache, S3, ECR, Secrets
+Manager, workload IAM, versioned Kubernetes manifests, and Terraform. Review
+infrastructure and workload plans plus cost limits before apply. Pin cluster/add-on
+versions, image digests, and active policy versions. Prefer expand/contract
 migrations and retain old-version compatibility for rollback; never automatically
 reverse data migrations. Exercise image/policy rollback and restore procedure
 in staging, then publish evidence. No production deployment is implied by this plan.

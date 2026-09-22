@@ -1,0 +1,62 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gateway-evaluate
+  namespace: __KUBERNETES_NAMESPACE__
+  labels:
+    app.kubernetes.io/name: gateway
+    app.kubernetes.io/component: evaluation
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 1800
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: gateway
+        app.kubernetes.io/component: evaluation
+    spec:
+      restartPolicy: Never
+      serviceAccountName: gateway
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: evaluate
+          image: __IMAGE_URI__
+          imagePullPolicy: IfNotPresent
+          command: ["gateway", "evaluate-worker", "--max-cases", "100"]
+          envFrom:
+            - configMapRef:
+                name: gateway-runtime
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          volumeMounts:
+            - name: runtime-secrets
+              mountPath: /mnt/secrets-store
+              readOnly: true
+            - name: temporary
+              mountPath: /tmp
+      volumes:
+        - name: runtime-secrets
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: gateway-runtime
+        - name: temporary
+          emptyDir: {}

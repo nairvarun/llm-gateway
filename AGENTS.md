@@ -20,11 +20,12 @@ secret and explicit approved non-sensitive classification. Live adapter dispatch
 remains disabled pending separate owner authorization and a recorded spend ceiling;
 passing offline evaluation gates does not itself authorize paid calls. A small
 synthetic benchmark is measured; do not generalize it to live quality/cost or
-staging performance. Milestone 6 has an unapplied Terraform staging/state-bucket
-design and account-specific review plans; read `docs/staging-plan-review.md`
-before cloud work. Planning does not authorize `terraform apply`, image push,
-deployment, or live-provider spend. Do not describe later infrastructure or
-targets as working or verified. The resume
+staging performance. Milestone 6 has an unapplied Terraform EKS
+staging/state-bucket design, account-specific review plans, and unexercised
+Kubernetes workload templates; read `docs/staging-plan-review.md` and
+`docs/eks-deployment.md` before cloud work. Planning does not authorize
+`terraform apply`, image push, secret population, deployment, or live-provider
+spend. Do not describe later infrastructure or targets as working or verified. The resume
 mentioned in the old instructions is not present; do not invent its contents.
 
 ## Read first and resolve conflicts
@@ -100,8 +101,11 @@ Run `uv run ruff format --check app migrations tests deploy`,
 The full suite requires PostgreSQL and Redis and fails loudly when either is absent.
 Integration tests create/drop only their own random PostgreSQL schemas and
 namespace-isolated Redis keys; do not point them at production.
-Use the quickstart smoke demo to verify the container. Also validate OpenSpec,
-documentation links, and preservation of references; use additional fault,
-security, and load checks proportionate to the change. Do not report commands as passing unless
+Use the quickstart smoke demo to verify the container. For EKS changes, test the
+secret-free renderer, inspect generated manifests, and validate Terraform with
+an account-specific read-only plan; this does not replace cluster-side policy or
+rollout evidence. Also validate OpenSpec, documentation links, and preservation
+of references; use additional fault, security, and load checks proportionate to
+the change. Do not report commands as passing unless
 they ran. Report changed files, checks performed, assumptions, and remaining
 work; distinguish measured results from goals.

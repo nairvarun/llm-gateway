@@ -76,9 +76,9 @@ This group is gated on explicit account/region/spend authorization, not just an
 implementation request or a passing local test.
 
 - [ ] 6.1 Deliver a threat model and ADRs for routing/reliability/cache/reservation/privacy choices; verify each documented trust boundary has corresponding tests or an explicit residual risk.
-- [ ] 6.2 Build/tag immutable service/runner images and environment configuration; verify image scans, no embedded secrets, reproducible identity, and mock staging smoke support.
-- [ ] 6.3 Add Terraform network/IAM/secret infrastructure and container/data/artifact resources; verify formatting/validation and an owner-reviewed account-specific plan with cost/retention limits before apply.
-- [ ] 6.4 Document and exercise authorized staging provisioning/migrations/deployment; verify private data services, least-privilege access, TLS/secret rotation, and clean-environment smoke evidence.
-- [ ] 6.5 Add explicit staging promotion with evaluation/security evidence and prior-image/policy rollback; verify a failed rollout blocks promotion and an exercised rollback preserves data/schema compatibility.
-- [ ] 6.6 Add load/tenant-isolation/dependency-outage and restore exercises; verify published workload/concurrency, deadline/spend behavior, recovery evidence, and runbook completeness.
+- [ ] 6.2 Build/tag immutable multi-platform service/runner images and Kubernetes environment configuration; verify ECR scans, no embedded secrets, reproducible digest identity, offline manifest policy checks, and mock staging smoke support.
+- [ ] 6.3 Add Terraform network/EKS/access-entry/workload-IAM/secret and data/artifact infrastructure; verify formatting/validation and an owner-reviewed account-specific plan with cluster/add-on versions, node sizing, cost, and retention limits before apply.
+- [ ] 6.4 Document and exercise authorized EKS provisioning, external-secret population, migration Job, API rollout, and evaluation Job; verify private nodes/data services, least-privilege service-account identity, TLS/secret rotation, health probes, NetworkPolicies, and clean-environment smoke evidence.
+- [ ] 6.5 Add explicit Kubernetes staging promotion with evaluation/security evidence and prior-image/policy rollout rollback; verify a failed rollout blocks promotion and an exercised rollback preserves data/schema compatibility.
+- [ ] 6.6 Add pod/node disruption, load, tenant-isolation, dependency-outage, cluster-upgrade, and restore exercises; verify published workload/concurrency, deadline/spend behavior, recovery evidence, and runbook completeness.
 - [ ] 6.7 Assemble release documentation, API examples, measured benchmark, test evidence, and concise demo; verify every capability scenario has traceable evidence and README accurately states delivered scope before proposing sync/archive.

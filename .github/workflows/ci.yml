@@ -45,6 +45,12 @@ jobs:
       - run: uv run pytest
       - run: uv run python -m deploy.benchmark --output "$RUNNER_TEMP/benchmark.json"
       - run: npm exec --yes --package=@fission-ai/openspec@1.13.0 -- openspec validate build-llm-reliability-gateway --strict --no-interactive
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: Verify AMD64 and ARM64 image builds
+        run: >-
+          docker buildx build --platform linux/amd64,linux/arm64
+          --output type=oci,dest="$RUNNER_TEMP/gateway-multiarch.tar" .
       - name: Build and smoke-test the offline container
         env:
           GATEWAY_POSTGRES_PORT: "55433"

@@ -17,7 +17,16 @@ locals {
     (local.azs[0]) = cidrsubnet(var.vpc_cidr, 8, 20)
     (local.azs[1]) = cidrsubnet(var.vpc_cidr, 8, 21)
   }
-  endpoints = toset(["ecr.api", "ecr.dkr", "logs", "secretsmanager"])
+  endpoints = toset([
+    "ec2",
+    "ecr.api",
+    "ecr.dkr",
+    "eks",
+    "eks-auth",
+    "secretsmanager",
+    "sts",
+  ])
+  eks_admin_principal_arn = coalesce(var.eks_admin_principal_arn, data.aws_caller_identity.current.arn)
 }
 
 data "aws_caller_identity" "current" {}

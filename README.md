@@ -11,8 +11,10 @@ admission/circuits, optional encrypted idempotency replay, atomic UTC spend
 reservations, opt-in encrypted exact caching, synthetic evaluation/gates,
 tenant-scoped summaries, and bounded telemetry/alerts are available. The HTTP
 runtime remains mock-only. A small synthetic benchmark is published. Milestone
-6 Terraform has a read-only AWS plan, but no resource has been applied; live-model
-quality/cost, cloud deployment, and staging release evidence remain future work.
+6 has an EKS Terraform design, versioned Kubernetes workload configuration, and
+an account-specific read-only AWS plan, but no resource has been applied;
+live-model quality/cost, cloud deployment, and staging release evidence remain
+future work.
 
 ## Run the offline gateway
 
@@ -42,6 +44,7 @@ requires internet access. Use the Lima alternative if Docker is not installed.
 - [Evaluation and observability verification](docs/milestone-5-verification.md)
 - [Synthetic benchmark and raw evidence](docs/milestone-5-benchmark.md)
 - [Staging Terraform plan and unresolved gates](docs/staging-plan-review.md)
+- [EKS deployment, migration, promotion, and rollback runbook](docs/eks-deployment.md)
 - [Ordered learning checklist](docs/learning-checklist.md)
 - [Build proposal](openspec/changes/build-llm-reliability-gateway/proposal.md)
 - [Architecture and decisions](openspec/changes/build-llm-reliability-gateway/design.md)
@@ -61,7 +64,7 @@ app/                            API/domain/adapters/routing/security/cache/usage
 tests/                          Unit/API/adapter and real-PostgreSQL checks
 migrations/                     Forward-only foundation through evaluation/ingress migrations
 datasets/                       Approved synthetic fixtures and threshold profile
-deploy/                         Bounded startup, smoke, evaluation and benchmark helpers
+deploy/                         Startup/smoke/evaluation helpers and EKS workload templates
 Dockerfile / compose.yaml        Local service, PostgreSQL, and critical Redis
 infra/terraform/                Unapplied AWS staging and state-bucket bootstrap
 .github/workflows/ci.yml         Offline checks and container smoke

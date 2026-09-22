@@ -2,7 +2,7 @@
   "attempt_limit": 1,
   "cache_ttl_seconds": 3600,
   "case_count": 7,
-  "code_revision_sha256": "df2e52a69748494ce845a28cf826b65007411e4067ea925cd263eeaeea98aad7",
+  "code_revision_sha256": "49d76e1106f51c0a81a63a2359e77b963766ed21cca0431327022b4158517f8f",
   "concurrency": 1,
   "conditions": {
     "fixed_mock_direct": {
@@ -29,7 +29,7 @@
           },
           "status": "completed",
           "task": "extraction",
-          "wall_ms": 0.086
+          "wall_ms": 0.089
         },
         {
           "cache_status": "bypass",
@@ -53,7 +53,7 @@
           },
           "status": "failed",
           "task": "extraction",
-          "wall_ms": 0.056
+          "wall_ms": 0.051
         },
         {
           "cache_status": "bypass",
@@ -77,7 +77,7 @@
           },
           "status": "failed",
           "task": "extraction",
-          "wall_ms": 0.025
+          "wall_ms": 0.024
         },
         {
           "cache_status": "bypass",
@@ -101,7 +101,7 @@
           },
           "status": "completed",
           "task": "extraction",
-          "wall_ms": 0.035
+          "wall_ms": 0.031
         },
         {
           "cache_status": "bypass",
@@ -125,7 +125,7 @@
           },
           "status": "failed",
           "task": "extraction",
-          "wall_ms": 0.01
+          "wall_ms": 0.012
         },
         {
           "cache_status": "bypass",
@@ -148,7 +148,7 @@
           },
           "status": "completed",
           "task": "classification",
-          "wall_ms": 0.006
+          "wall_ms": 0.005
         },
         {
           "cache_status": "bypass",
@@ -198,7 +198,7 @@
           },
           "status": "completed",
           "task": "extraction",
-          "wall_ms": 0.027
+          "wall_ms": 0.023
         },
         {
           "cache_status": "bypass",
@@ -222,7 +222,7 @@
           },
           "status": "failed",
           "task": "extraction",
-          "wall_ms": 0.03
+          "wall_ms": 0.027
         },
         {
           "cache_status": "bypass",
@@ -246,7 +246,7 @@
           },
           "status": "failed",
           "task": "extraction",
-          "wall_ms": 0.013
+          "wall_ms": 0.012
         },
         {
           "cache_status": "bypass",
@@ -270,7 +270,7 @@
           },
           "status": "completed",
           "task": "extraction",
-          "wall_ms": 0.024
+          "wall_ms": 0.022
         },
         {
           "cache_status": "bypass",
@@ -343,13 +343,13 @@
           },
           "status": "completed",
           "task": "generation",
-          "wall_ms": 0.004
+          "wall_ms": 0.003
         }
       ],
       "summary": {
         "cache_hits": 0,
         "estimated_fresh_cost_usd": "0",
-        "p95_end_to_end_ms": 0.086,
+        "p95_end_to_end_ms": 0.089,
         "p95_gateway_overhead_ms": 0.0,
         "provider_invocations": 14,
         "requests": 14,
@@ -395,10 +395,10 @@
           "difficulty": "easy",
           "error_code": null,
           "estimated_cost_usd": "0",
-          "overhead_ms": 52.857,
+          "overhead_ms": 53.597,
           "provider_invocations": 1,
           "repetition": 1,
-          "request_id": "e6172105-6eb8-436d-ae73-2e3ab7cc60da",
+          "request_id": "03ad5e5e-80b3-4a48-a8c9-506bb8abf20f",
           "score": {
             "case_exact_match": true,
             "difficulty": "easy",
@@ -412,7 +412,7 @@
           },
           "status": "completed",
           "task": "extraction",
-          "wall_ms": 52.87
+          "wall_ms": 53.614
         },
         {
           "cache_status": "bypass",
@@ -420,10 +420,10 @@
           "difficulty": "ambiguous",
           "error_code": "OUTPUT_VALIDATION_FAILED",
           "estimated_cost_usd": "0",
-          "overhead_ms": 31.178,
+          "overhead_ms": 28.773,
           "provider_invocations": 1,
           "repetition": 1,
-          "request_id": "77bcf0d2-b3a8-4d72-9106-b6cf8e8293df",
+          "request_id": "761e5174-bd37-4fe9-9561-6d105de53fc3",
           "score": {
             "case_exact_match": false,
             "difficulty": "ambiguous",
@@ -437,7 +437,7 @@
           },
           "status": "failed",
           "task": "extraction",
-          "wall_ms": 31.201
+          "wall_ms": 28.786
         },
         {
           "cache_status": "bypass",
@@ -445,10 +445,10 @@
           "difficulty": "malformed",
           "error_code": "OUTPUT_VALIDATION_FAILED",
           "estimated_cost_usd": "0",
-          "overhead_ms": 30.536,
+          "overhead_ms": 29.204,
           "provider_invocations": 1,
           "repetition": 1,
-          "request_id": "6af3a47b-7223-49c0-ba5f-4ddf8638aa68",
+          "request_id": "05b03485-1995-42b6-89d3-942783c110a7",
           "score": {
             "case_exact_match": false,
             "difficulty": "malformed",
@@ -462,7 +462,7 @@
           },
           "status": "failed",
           "task": "extraction",
-          "wall_ms": 30.548
+          "wall_ms": 29.223
         },
         {
           "cache_status": "bypass",
@@ -470,10 +470,10 @@
           "difficulty": "adversarial",
           "error_code": null,
           "estimated_cost_usd": "0",
-          "overhead_ms": 33.516,
+          "overhead_ms": 28.113,
           "provider_invocations": 1,
           "repetition": 1,
-          "request_id": "6323933a-7a72-4333-a477-aa0732229fb3",
+          "request_id": "c3f8ae26-cabd-42a7-bcaf-508beac54376",
           "score": {
             "case_exact_match": true,
             "difficulty": "adversarial",
@@ -487,7 +487,7 @@
           },
           "status": "completed",
           "task": "extraction",
-          "wall_ms": 33.531
+          "wall_ms": 28.124
         },
         {
           "cache_status": "bypass",
@@ -495,10 +495,10 @@
           "difficulty": "long_context",
           "error_code": "OUTPUT_VALIDATION_FAILED",
           "estimated_cost_usd": "0",
-          "overhead_ms": 32.337,
+          "overhead_ms": 24.833,
           "provider_invocations": 1,
           "repetition": 1,
-          "request_id": "bcfec3a8-229f-4bd0-9a71-a31d03d0e819",
+          "request_id": "ff2f4c8d-0896-4df0-b644-7542cb996437",
           "score": {
             "case_exact_match": false,
             "difficulty": "long_context",
@@ -512,7 +512,7 @@
           },
           "status": "failed",
           "task": "extraction",
-          "wall_ms": 32.353
+          "wall_ms": 24.849
         },
         {
           "cache_status": "bypass",
@@ -520,10 +520,10 @@
           "difficulty": "easy",
           "error_code": null,
           "estimated_cost_usd": "0",
-          "overhead_ms": 33.28,
+          "overhead_ms": 22.729,
           "provider_invocations": 1,
           "repetition": 1,
-          "request_id": "d76b4e2b-bcc2-46bc-aa0e-8110ddaaf108",
+          "request_id": "abbf18b1-2192-47c2-b5bc-a810bf543b59",
           "score": {
             "correct": false,
             "difficulty": "easy",
@@ -536,7 +536,7 @@
           },
           "status": "completed",
           "task": "classification",
-          "wall_ms": 33.294
+          "wall_ms": 22.74
         },
         {
           "cache_status": "bypass",
@@ -544,10 +544,10 @@
           "difficulty": "easy",
           "error_code": null,
           "estimated_cost_usd": "0",
-          "overhead_ms": 30.594,
+          "overhead_ms": 18.882,
           "provider_invocations": 1,
           "repetition": 1,
-          "request_id": "6a071f77-461a-4b41-90b6-e4b0d426a37c",
+          "request_id": "7151c44c-3c73-45b8-b49a-545b58741829",
           "score": {
             "difficulty": "easy",
             "execution_succeeded": true,
@@ -563,7 +563,7 @@
           },
           "status": "completed",
           "task": "generation",
-          "wall_ms": 30.608
+          "wall_ms": 18.893
         },
         {
           "cache_status": "bypass",
@@ -571,10 +571,10 @@
           "difficulty": "easy",
           "error_code": null,
           "estimated_cost_usd": "0",
-          "overhead_ms": 29.47,
+          "overhead_ms": 19.177,
           "provider_invocations": 1,
           "repetition": 2,
-          "request_id": "7ca080c2-4bb1-4f93-ba88-617b4deeb9d6",
+          "request_id": "b3bdd114-a409-41ef-a2f3-8572b6adb9fb",
           "score": {
             "case_exact_match": true,
             "difficulty": "easy",
@@ -588,7 +588,7 @@
           },
           "status": "completed",
           "task": "extraction",
-          "wall_ms": 29.487
+          "wall_ms": 19.192
         },
         {
           "cache_status": "bypass",
@@ -596,10 +596,10 @@
           "difficulty": "ambiguous",
           "error_code": "OUTPUT_VALIDATION_FAILED",
           "estimated_cost_usd": "0",
-          "overhead_ms": 27.706,
+          "overhead_ms": 25.347,
           "provider_invocations": 1,
           "repetition": 2,
-          "request_id": "bdb7b041-aafb-464e-8869-814961c45718",
+          "request_id": "f3daa241-f443-473f-afde-239ae45404d7",
           "score": {
             "case_exact_match": false,
             "difficulty": "ambiguous",
@@ -613,7 +613,7 @@
           },
           "status": "failed",
           "task": "extraction",
-          "wall_ms": 27.721
+          "wall_ms": 25.365
         },
         {
           "cache_status": "bypass",
@@ -621,10 +621,10 @@
           "difficulty": "malformed",
           "error_code": "OUTPUT_VALIDATION_FAILED",
           "estimated_cost_usd": "0",
-          "overhead_ms": 27.068,
+          "overhead_ms": 21.839,
           "provider_invocations": 1,
           "repetition": 2,
-          "request_id": "d6a8a571-dce3-4065-893e-40607ebc3c51",
+          "request_id": "e1ba6054-ba23-4754-ae21-30de11d92ad7",
           "score": {
             "case_exact_match": false,
             "difficulty": "malformed",
@@ -638,7 +638,7 @@
           },
           "status": "failed",
           "task": "extraction",
-          "wall_ms": 27.082
+          "wall_ms": 21.85
         },
         {
           "cache_status": "bypass",
@@ -646,10 +646,10 @@
           "difficulty": "adversarial",
           "error_code": null,
           "estimated_cost_usd": "0",
-          "overhead_ms": 24.102,
+          "overhead_ms": 19.991,
           "provider_invocations": 1,
           "repetition": 2,
-          "request_id": "06c96fe8-4338-4b6e-9eb4-f614b4faa2ec",
+          "request_id": "3a70f0fb-243e-430b-ba12-f20d1b715550",
           "score": {
             "case_exact_match": true,
             "difficulty": "adversarial",
@@ -663,7 +663,7 @@
           },
           "status": "completed",
           "task": "extraction",
-          "wall_ms": 24.113
+          "wall_ms": 20.004
         },
         {
           "cache_status": "bypass",
@@ -671,10 +671,10 @@
           "difficulty": "long_context",
           "error_code": "OUTPUT_VALIDATION_FAILED",
           "estimated_cost_usd": "0",
-          "overhead_ms": 21.592,
+          "overhead_ms": 40.681,
           "provider_invocations": 1,
           "repetition": 2,
-          "request_id": "a82c8992-601a-451d-bce3-2de229f35624",
+          "request_id": "80636243-874d-495d-8b50-9c8994690383",
           "score": {
             "case_exact_match": false,
             "difficulty": "long_context",
@@ -688,7 +688,7 @@
           },
           "status": "failed",
           "task": "extraction",
-          "wall_ms": 21.6
+          "wall_ms": 40.691
         },
         {
           "cache_status": "bypass",
@@ -696,10 +696,10 @@
           "difficulty": "easy",
           "error_code": null,
           "estimated_cost_usd": "0",
-          "overhead_ms": 19.38,
+          "overhead_ms": 39.958,
           "provider_invocations": 1,
           "repetition": 2,
-          "request_id": "a65c5ae9-30eb-4b9c-a8e9-7f66610756fc",
+          "request_id": "9ff2fdd4-bcb0-476c-8b86-e824e095291b",
           "score": {
             "correct": false,
             "difficulty": "easy",
@@ -712,7 +712,7 @@
           },
           "status": "completed",
           "task": "classification",
-          "wall_ms": 19.387
+          "wall_ms": 39.969
         },
         {
           "cache_status": "bypass",
@@ -720,10 +720,10 @@
           "difficulty": "easy",
           "error_code": null,
           "estimated_cost_usd": "0",
-          "overhead_ms": 19.377,
+          "overhead_ms": 19.086,
           "provider_invocations": 1,
           "repetition": 2,
-          "request_id": "ada4ff25-b75f-4226-8686-aa8040c14e30",
+          "request_id": "ca1e388f-ad87-465d-a1d4-bcf2756b3dbd",
           "score": {
             "difficulty": "easy",
             "execution_succeeded": true,
@@ -739,14 +739,14 @@
           },
           "status": "completed",
           "task": "generation",
-          "wall_ms": 19.386
+          "wall_ms": 19.095
         }
       ],
       "summary": {
         "cache_hits": 0,
         "estimated_fresh_cost_usd": "0",
-        "p95_end_to_end_ms": 52.87,
-        "p95_gateway_overhead_ms": 52.857,
+        "p95_end_to_end_ms": 53.614,
+        "p95_gateway_overhead_ms": 53.597,
         "provider_invocations": 14,
         "requests": 14,
         "scores": {
@@ -791,10 +791,10 @@
           "difficulty": "easy",
           "error_code": null,
           "estimated_cost_usd": "0",
-          "overhead_ms": 31.717,
+          "overhead_ms": 45.288,
           "provider_invocations": 1,
           "repetition": 1,
-          "request_id": "6971ae0e-cf46-41c4-bf41-6b5f574aeeff",
+          "request_id": "93bff922-7471-432d-8c99-1aa13c63330b",
           "score": {
             "case_exact_match": true,
             "difficulty": "easy",
@@ -808,7 +808,7 @@
           },
           "status": "completed",
           "task": "extraction",
-          "wall_ms": 31.727
+          "wall_ms": 45.302
         },
         {
           "cache_status": "bypass",
@@ -816,10 +816,10 @@
           "difficulty": "ambiguous",
           "error_code": "OUTPUT_VALIDATION_FAILED",
           "estimated_cost_usd": "0",
-          "overhead_ms": 25.946,
+          "overhead_ms": 25.705,
           "provider_invocations": 1,
           "repetition": 1,
-          "request_id": "1fb4e1c4-e3a4-4f9c-bb7c-e0f78ad5f7c1",
+          "request_id": "ab76eb23-dc2b-4b30-949e-3159119cc97e",
           "score": {
             "case_exact_match": false,
             "difficulty": "ambiguous",
@@ -833,7 +833,7 @@
           },
           "status": "failed",
           "task": "extraction",
-          "wall_ms": 25.954
+          "wall_ms": 25.715
         },
         {
           "cache_status": "bypass",
@@ -841,10 +841,10 @@
           "difficulty": "malformed",
           "error_code": "OUTPUT_VALIDATION_FAILED",
           "estimated_cost_usd": "0",
-          "overhead_ms": 25.305,
+          "overhead_ms": 25.187,
           "provider_invocations": 1,
           "repetition": 1,
-          "request_id": "56a5a0bd-61f3-462a-9b20-94ba3edaf019",
+          "request_id": "dbc1a72e-262d-4615-859b-db4ef7fe5dfd",
           "score": {
             "case_exact_match": false,
             "difficulty": "malformed",
@@ -858,7 +858,7 @@
           },
           "status": "failed",
           "task": "extraction",
-          "wall_ms": 25.312
+          "wall_ms": 25.199
         },
         {
           "cache_status": "miss",
@@ -866,10 +866,10 @@
           "difficulty": "adversarial",
           "error_code": null,
           "estimated_cost_usd": "0",
-          "overhead_ms": 25.468,
+          "overhead_ms": 33.239,
           "provider_invocations": 1,
           "repetition": 1,
-          "request_id": "9b2533fa-f12d-4895-b68a-b6dfb97b1429",
+          "request_id": "2a5018c4-f91c-4079-8875-dd8d42901860",
           "score": {
             "case_exact_match": true,
             "difficulty": "adversarial",
@@ -883,7 +883,7 @@
           },
           "status": "completed",
           "task": "extraction",
-          "wall_ms": 25.477
+          "wall_ms": 33.25
         },
         {
           "cache_status": "bypass",
@@ -891,10 +891,10 @@
           "difficulty": "long_context",
           "error_code": "OUTPUT_VALIDATION_FAILED",
           "estimated_cost_usd": "0",
-          "overhead_ms": 24.688,
+          "overhead_ms": 24.74,
           "provider_invocations": 1,
           "repetition": 1,
-          "request_id": "ee4f8d46-6338-478e-9a5c-ccdf7480f87f",
+          "request_id": "edeeb01c-cdcc-4135-9cc3-4e42e3159608",
           "score": {
             "case_exact_match": false,
             "difficulty": "long_context",
@@ -908,7 +908,7 @@
           },
           "status": "failed",
           "task": "extraction",
-          "wall_ms": 24.696
+          "wall_ms": 24.763
         },
         {
           "cache_status": "miss",
@@ -916,10 +916,10 @@
           "difficulty": "easy",
           "error_code": null,
           "estimated_cost_usd": "0",
-          "overhead_ms": 24.061,
+          "overhead_ms": 24.226,
           "provider_invocations": 1,
           "repetition": 1,
-          "request_id": "30449166-b1bd-41cc-9b3f-b6ca09299bad",
+          "request_id": "2fed5565-593b-4077-a7a9-ec26982dfc31",
           "score": {
             "correct": false,
             "difficulty": "easy",
@@ -932,7 +932,7 @@
           },
           "status": "completed",
           "task": "classification",
-          "wall_ms": 24.068
+          "wall_ms": 24.235
         },
         {
           "cache_status": "miss",
@@ -940,10 +940,10 @@
           "difficulty": "easy",
           "error_code": null,
           "estimated_cost_usd": "0",
-          "overhead_ms": 23.975,
+          "overhead_ms": 24.192,
           "provider_invocations": 1,
           "repetition": 1,
-          "request_id": "9362cf36-c07b-4b2b-9134-e9a59cbdcd2d",
+          "request_id": "7ec05d46-b5fb-4cda-aaa4-322c89218243",
           "score": {
             "difficulty": "easy",
             "execution_succeeded": true,
@@ -959,7 +959,7 @@
           },
           "status": "completed",
           "task": "generation",
-          "wall_ms": 23.982
+          "wall_ms": 24.2
         },
         {
           "cache_status": "hit",
@@ -967,10 +967,10 @@
           "difficulty": "easy",
           "error_code": null,
           "estimated_cost_usd": "0",
-          "overhead_ms": 15.287,
+          "overhead_ms": 14.776,
           "provider_invocations": 0,
           "repetition": 2,
-          "request_id": "51150ffa-5916-4681-bda2-6e3716bc5a02",
+          "request_id": "55263268-cd12-4bd0-a181-359477b26af1",
           "score": {
             "case_exact_match": true,
             "difficulty": "easy",
@@ -984,7 +984,7 @@
           },
           "status": "completed",
           "task": "extraction",
-          "wall_ms": 15.287
+          "wall_ms": 14.776
         },
         {
           "cache_status": "bypass",
@@ -992,10 +992,10 @@
           "difficulty": "ambiguous",
           "error_code": "OUTPUT_VALIDATION_FAILED",
           "estimated_cost_usd": "0",
-          "overhead_ms": 24.93,
+          "overhead_ms": 26.118,
           "provider_invocations": 1,
           "repetition": 2,
-          "request_id": "964f107e-e2d2-45f5-9793-112b016897d4",
+          "request_id": "8d0bd072-2caf-4413-868d-16af587009b5",
           "score": {
             "case_exact_match": false,
             "difficulty": "ambiguous",
@@ -1009,7 +1009,7 @@
           },
           "status": "failed",
           "task": "extraction",
-          "wall_ms": 24.938
+          "wall_ms": 26.127
         },
         {
           "cache_status": "bypass",
@@ -1017,10 +1017,10 @@
           "difficulty": "malformed",
           "error_code": "OUTPUT_VALIDATION_FAILED",
           "estimated_cost_usd": "0",
-          "overhead_ms": 23.921,
+          "overhead_ms": 25.362,
           "provider_invocations": 1,
           "repetition": 2,
-          "request_id": "1457216e-e04f-42d0-a620-d2be4942e6e7",
+          "request_id": "5c4bb23d-4718-46a0-843a-a2a9d0cd55c7",
           "score": {
             "case_exact_match": false,
             "difficulty": "malformed",
@@ -1034,7 +1034,7 @@
           },
           "status": "failed",
           "task": "extraction",
-          "wall_ms": 23.929
+          "wall_ms": 25.372
         },
         {
           "cache_status": "hit",
@@ -1042,10 +1042,10 @@
           "difficulty": "adversarial",
           "error_code": null,
           "estimated_cost_usd": "0",
-          "overhead_ms": 15.581,
+          "overhead_ms": 15.394,
           "provider_invocations": 0,
           "repetition": 2,
-          "request_id": "c1aaf03d-8765-4158-a32c-e1644c1e4670",
+          "request_id": "676660f2-2ca0-4f05-8387-f332975b19f4",
           "score": {
             "case_exact_match": true,
             "difficulty": "adversarial",
@@ -1059,7 +1059,7 @@
           },
           "status": "completed",
           "task": "extraction",
-          "wall_ms": 15.581
+          "wall_ms": 15.394
         },
         {
           "cache_status": "bypass",
@@ -1067,10 +1067,10 @@
           "difficulty": "long_context",
           "error_code": "OUTPUT_VALIDATION_FAILED",
           "estimated_cost_usd": "0",
-          "overhead_ms": 24.296,
+          "overhead_ms": 25.499,
           "provider_invocations": 1,
           "repetition": 2,
-          "request_id": "6c2548f9-abf3-4848-ad94-4a37ca5104f3",
+          "request_id": "938cdb4c-18cc-4b1a-bc3c-57d2a6f9869f",
           "score": {
             "case_exact_match": false,
             "difficulty": "long_context",
@@ -1084,7 +1084,7 @@
           },
           "status": "failed",
           "task": "extraction",
-          "wall_ms": 24.305
+          "wall_ms": 25.508
         },
         {
           "cache_status": "hit",
@@ -1092,10 +1092,10 @@
           "difficulty": "easy",
           "error_code": null,
           "estimated_cost_usd": "0",
-          "overhead_ms": 14.286,
+          "overhead_ms": 14.767,
           "provider_invocations": 0,
           "repetition": 2,
-          "request_id": "7571ea60-9ba5-4ce8-a2a8-5e7a6ead9646",
+          "request_id": "59ef5d1c-2374-4178-8a2f-703f899d4132",
           "score": {
             "correct": false,
             "difficulty": "easy",
@@ -1108,7 +1108,7 @@
           },
           "status": "completed",
           "task": "classification",
-          "wall_ms": 14.286
+          "wall_ms": 14.767
         },
         {
           "cache_status": "hit",
@@ -1116,10 +1116,10 @@
           "difficulty": "easy",
           "error_code": null,
           "estimated_cost_usd": "0",
-          "overhead_ms": 14.046,
+          "overhead_ms": 17.779,
           "provider_invocations": 0,
           "repetition": 2,
-          "request_id": "974fdc9c-7784-48d1-81c0-da0dacda414b",
+          "request_id": "f169cc09-764d-4007-9ab7-ecb8274069f2",
           "score": {
             "difficulty": "easy",
             "execution_succeeded": true,
@@ -1135,14 +1135,14 @@
           },
           "status": "completed",
           "task": "generation",
-          "wall_ms": 14.046
+          "wall_ms": 17.779
         }
       ],
       "summary": {
         "cache_hits": 4,
         "estimated_fresh_cost_usd": "0",
-        "p95_end_to_end_ms": 31.727,
-        "p95_gateway_overhead_ms": 31.717,
+        "p95_end_to_end_ms": 45.302,
+        "p95_gateway_overhead_ms": 45.288,
         "provider_invocations": 10,
         "requests": 14,
         "scores": {
@@ -1196,7 +1196,7 @@
     "Sequential local workload is not production throughput or staging SLO evidence.",
     "Failure HTTP errors omit attempt cost; pinned mock pricing is zero USD."
   ],
-  "measured_at": "2026-09-21T02:37:15.805424+00:00",
+  "measured_at": "2026-09-22T15:03:14.936226+00:00",
   "policy": "mock-policy@v2",
   "pricing": "mock-text-v1@v2 zero USD",
   "provider": "synthetic mock-text-v1@v2 only",

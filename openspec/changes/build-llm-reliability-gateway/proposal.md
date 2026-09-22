@@ -20,7 +20,8 @@ the informal handoff needs a testable contract before implementation begins.
 - Add tenant-scoped idempotency, exact caching, concurrent spend reservations,
   attempt-level usage attribution, and privacy-safe operational evidence.
 - Add versioned evaluation datasets, task-specific scores, promotion gates,
-  reproducible local deployment, and a gated AWS staging deployment.
+  reproducible local deployment, and a gated Terraform-managed AWS EKS staging
+  deployment.
 - Deliver through milestone gates rather than presenting the whole platform as
   an MVP. The first five offline milestones are implemented; live dispatch remains gated.
 
@@ -51,15 +52,17 @@ specs. Milestone 1 subsequently added application code under this change.
 ## Impact
 
 Future additions affect the FastAPI service, PostgreSQL/Redis state, provider
-adapters, evaluation artifacts, CI, Docker, and Terraform-managed AWS staging.
+adapters, evaluation artifacts, CI, Docker, Kubernetes manifests, and
+Terraform-managed AWS EKS staging.
 SDK/provider selection and account-specific AWS settings require decisions
 before their milestone; this proposal does not authorize paid calls or provisioning.
 
 ### Non-goals
 
 No chatbot UI, general RAG/agent framework, training, every provider/modality,
-streaming, OpenAI compatibility, adaptive routing, multi-region deployment, or
-Kubernetes in the baseline. Semantic caching remains a separately gated extension
+streaming, OpenAI compatibility, adaptive routing, multi-region or multi-cluster
+deployment, or provider-neutral Kubernetes portability in the baseline. AWS EKS
+is the authorized staging target. Semantic caching remains a separately gated extension
 because approximate reuse needs a quality/isolation contract, not just key hashing.
 No claim of exactly-once upstream execution, guaranteed actual billing ceilings,
 or LLM-judge ground truth. Portfolio metrics are targets until measured.

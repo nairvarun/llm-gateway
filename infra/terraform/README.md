@@ -5,8 +5,9 @@ This is an **unapplied** AWS staging design. It has two independent plans:
 1. `bootstrap/` provisions the private, versioned, encrypted S3 bucket for
    Terraform state. Bootstrap necessarily starts with local state; keep that
    file private and transfer custody before any approved apply.
-2. This directory provisions the staging network, data services, secrets
-   *containers*, ECR, roles, and optional runtime. Its checked-in
+2. This directory provisions the staging network, EKS 1.35 control plane and
+   private ARM64 managed nodes, pinned add-ons, data services, secret
+   *containers*, ECR, access entries, and workload identity. Its checked-in
    `backend.tf.example` is deliberately inactive until the bootstrap bucket
    exists. The current review plan uses local backend mode and must be
    regenerated after backend activation; do not apply a stale saved plan.
@@ -55,11 +56,12 @@ custody procedure; do not commit or discard it. Re-plan the main stack against
 that backend and obtain review of that **new** plan before applying it. Never
 reuse this local-backend review plan for the remote-backend deployment.
 
-The base plan deliberately has `enable_runtime=false`, no image digest, no
-ACM certificate, no ECS service, and no public ALB. Runtime activation needs
-an approved hostname and regional certificate, immutable ARM64 image digest,
-populated secret versions, a least-privilege database application user,
-successful one-off migrations, and a fresh plan/review. The public listener
-is HTTPS-only. No NAT or outbound internet path exists from private tasks;
-paid provider dispatch cannot work in this network design and remains
-separately prohibited until authorized and designed.
+The reviewed main plan includes EKS and managed nodes but deliberately has no
+Kubernetes provider, workload objects, public load balancer, or DNS. Runtime
+activation needs an immutable ARM64 image digest, populated secret versions,
+a least-privilege database application user, a valid internal TLS certificate,
+successful one-off migrations, and the staged workload procedure in the
+[EKS runbook](../../docs/eks-deployment.md). The Kubernetes API is private by
+default; provide a reviewed VPC access path or a bounded administrator CIDR and
+re-plan. No NAT or outbound internet path exists from private nodes, so paid
+provider dispatch cannot work and remains separately prohibited.
