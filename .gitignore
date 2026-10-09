@@ -6,3 +6,4 @@ __pycache__/
 *.db
 *.db-wal
 *.db-shm
+deploy/k8s/base/secrets.env

@@ -919,3 +919,15 @@ Build in spec phase order. Each phase ends with its tests green, its metric visi
 - [x] Temperature passes through unchanged; values above 1 are clamped to 1 for Anthropic targets (D15).
 - [x] The K2 HPA scales on CPU (D16); `/v1/models` is stable regardless of breaker state (D17).
 - [ ] Real model IDs and prices: verified when provider API keys are added.
+
+## Implementation notes
+
+Where the code ended up differing from the design above, and why.
+
+- **Disconnect handling.** `app.py` defines `SSEResponse`, which always runs a disconnect watcher. Starlette only cancels the streaming task on disconnect for ASGI spec versions below 2.4, and the gateway should not depend on the server's reported version.
+- **Cleanup is shielded everywhere.** Under anyio, a cancelled scope cancels every later await, so `wrap_stream` and route's relay run their cleanup through `shielded()`. `wrap_stream` also closes its inner stream explicitly before calling `on_close`; nested async generators are otherwise only closed by garbage collection.
+- **One more error kind.** `ProviderError` has a `network` kind for a connection that broke after it was established (reset, truncated body). It is retryable before the first byte and counts as a breaker failure.
+- **Server entry point.** The app is built by a factory: `uvicorn gateway.app:create_app_from_env --factory`. Importing `gateway.app` therefore never reads config, which keeps tests simple.
+- **Drain delay is configurable.** `shutdown.drain_delay_s` (default 10) sets how long `/internal/drain` waits; tests set it to 0.
+- **Example config location.** The example config lives at `deploy/k8s/base/config.yaml`, because Kustomize only reads files inside its own directory. A `configMapGenerator` adds a content hash to the ConfigMap name, which rolls the pods on a config change.
+- **Test layout.** Unit tests are grouped in `tests/unit/test_basics.py` and `tests/unit/test_config.py`, adapters in `tests/providers/test_adapters.py`, stages in `tests/stages/test_stages.py`, and end-to-end behavior in `tests/integration/`. All named tests from the test plan exist under those names.

@@ -1,0 +1,17 @@
+# K1: one replica, SQLite on a ReadWriteOnce PVC, in-memory limiter, cache and breaker.
+# Recreate, because a rolling update would leave the new pod waiting for the volume (D10).
+# No PDB or HPA here: they belong to K2.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+  - pvc.yaml
+patches:
+  - target: {kind: Deployment, name: gateway}
+    patch: |-
+      - op: replace
+        path: /spec/strategy
+        value: {type: Recreate}
+      - op: replace
+        path: /spec/template/spec/volumes/1
+        value: {name: data, persistentVolumeClaim: {claimName: gateway-data}}

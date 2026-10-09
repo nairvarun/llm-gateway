@@ -1,0 +1,19 @@
+# Only /v1 is routed. /admin and /internal are reachable in-cluster or via port-forward only.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: gateway
+  annotations:
+    # Long streams: do not cut or buffer them at the proxy (ingress-nginx annotations).
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "330"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+spec:
+  rules:
+    - http:
+        paths:
+          - path: /v1
+            pathType: Prefix
+            backend:
+              service:
+                name: gateway
+                port: {name: http}

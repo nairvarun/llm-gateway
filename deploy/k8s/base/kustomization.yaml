@@ -1,0 +1,23 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: llm-gateway
+labels:
+  - pairs: {app.kubernetes.io/name: llm-gateway}
+    includeSelectors: true
+resources:
+  - namespace.yaml
+  - deployment.yaml
+  - service.yaml
+  - networkpolicy.yaml
+  - ingress.yaml
+# The generated name carries a content hash, so a config change rolls the pods (no hot reload).
+configMapGenerator:
+  - name: gateway-config
+    files:
+      - config.yaml
+# Secrets are never committed. Create them from a local, git-ignored env file:
+#   OPENAI_API_KEY=...  ANTHROPIC_API_KEY=...  ADMIN_TOKEN=<at least 32 characters>
+secretGenerator:
+  - name: gateway-secrets
+    envs:
+      - secrets.env

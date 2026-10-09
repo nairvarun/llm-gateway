@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway
+spec:
+  replicas: 1
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: /metrics
+    spec:
+      # preStop drain delay (10) + drain_s (330) + margin (20)
+      terminationGracePeriodSeconds: 360
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: gateway
+          image: llm-gateway:dev
+          ports:
+            - {name: http, containerPort: 8080}
+          env:
+            - {name: GATEWAY_CONFIG, value: /etc/gateway/config.yaml}
+            - {name: GATEWAY_DB_PATH, value: /data/gateway.db}
+          envFrom:
+            - secretRef: {name: gateway-secrets}
+          volumeMounts:
+            - {name: config, mountPath: /etc/gateway, readOnly: true}
+            - {name: data, mountPath: /data}
+            - {name: tmp, mountPath: /tmp}
+          readinessProbe:
+            httpGet: {path: /readyz, port: http}
+            periodSeconds: 5
+            failureThreshold: 2
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 10
+            failureThreshold: 3
+          lifecycle:
+            preStop:
+              # Loopback call: /internal/drain answers only 127.0.0.1. It flips /readyz, then
+              # waits drain_delay_s so the ingress stops routing here before SIGTERM arrives.
+              exec:
+                command:
+                  - python
+                  - -c
+                  - >-
+                    import urllib.request;
+                    urllib.request.urlopen(urllib.request.Request(
+                    'http://127.0.0.1:8080/internal/drain', method='POST'), timeout=30)
+          # Starting values; replace with numbers from the load test (spec 8.2).
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {memory: 512Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+      volumes:
+        - name: config
+          configMap: {name: gateway-config}
+        - name: data
+          emptyDir: {}  # the k1 overlay replaces this with a PVC
+        - name: tmp
+          emptyDir: {}

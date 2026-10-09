@@ -8,7 +8,7 @@ from pydantic import ValidationError
 from gateway.config import Config, ConfigError, load_config
 from tests.conftest import config_dict, make_config
 
-EXAMPLE = Path(__file__).parents[2] / "deploy" / "config.example.yaml"
+EXAMPLE = Path(__file__).parents[2] / "deploy" / "k8s" / "base" / "config.yaml"
 
 
 def test_valid_config():
