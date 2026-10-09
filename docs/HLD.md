@@ -138,7 +138,7 @@ The outermost `observe` stage owns the request ID and emits all three signals, s
 
 | Signal | What | Labels or fields |
 | --- | --- | --- |
-| Metrics | Requests, latency and TTFT histograms, tokens, cost, errors, in-flight, retries, cache hits, breaker state, auth failures | alias, provider, model, status class |
+| Metrics | Requests, latency and TTFT histograms, tokens, cost, errors, in-flight, retries, cache hits, breaker state, auth failures | alias, provider, status class |
 | Logs | One JSON line per request | `request_id`, key ID, alias, provider, status, latency, attempts |
 | Traces | One span per request, a child span per provider attempt | Off unless `OTEL_EXPORTER_OTLP_ENDPOINT` is set |
 | Dashboard | Grafana JSON shipped in `deploy/` | RED panels plus TTFT, cost and breaker state |
@@ -157,8 +157,8 @@ K1 must use `Recreate`: a ReadWriteOnce volume attaches to one node, so a rollin
 **Graceful shutdown, in the order Kubernetes runs it**
 
 1. The pod is marked terminating and endpoint removal starts.
-2. `preStop` sleeps 10 s so the ingress stops sending new traffic. This step is what prevents dropped requests.
-3. SIGTERM arrives; the app sets draining, `/readyz` fails, and new requests get 503.
+2. `preStop` calls the loopback-only `/internal/drain`: the app sets draining, `/readyz` fails, new requests get 503, and the call waits 10 s so the ingress stops sending traffic. This step is what prevents dropped requests.
+3. SIGTERM arrives after the hook returns; uvicorn stops accepting connections.
 4. Uvicorn waits for in-flight streams for up to `drain_s` (330 s, at least the 300 s total timeout).
 5. `terminationGracePeriodSeconds` covers preStop + `drain_s` + a margin, so SIGKILL never cuts a live stream.
 
@@ -196,11 +196,11 @@ The biggest risks are in streaming accounting and provider format drift. Both ar
 | Model IDs or prices change | Wrong costs | Verify at build time; startup check that every model has a price |
 | Budget overspend under concurrency | Small overspend per key | Accepted and documented (D8) |
 
-**Open questions**
+**Resolved questions**
 
-- Which K2 HPA signal: CPU (the default) or in-flight requests through a custom-metrics adapter?
-- Should `/v1/models` hide aliases whose targets all have open breakers?
-- Which exact model IDs and prices to ship with, verified at build time.
+- K2 HPA scales on CPU; in-flight scaling is a stretch (D16).
+- `/v1/models` stays stable regardless of breaker state (D17).
+- Model IDs and prices are verified when provider API keys are added; until then the config holds placeholders.
 
 **Milestones**
 

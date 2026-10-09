@@ -116,7 +116,7 @@ The canonical internal format is the OpenAI schema.
 | Endpoint | Purpose |
 | --- | --- |
 | `POST /v1/chat/completions` | Main endpoint, `stream: true` supported |
-| `GET /v1/models` | Aliases the calling key may use |
+| `GET /v1/models` | Aliases the calling key may use. The list is stable: it does not change with provider health. |
 | `GET /healthz` | Liveness: the process is up. Never checks dependencies. |
 | `GET /readyz` | Readiness: config loaded, store reachable, not draining |
 | `GET /metrics` | Prometheus |
@@ -293,7 +293,7 @@ A phase is finished only when its tests pass, its metric exists, and its note is
 ### Phase 5: Observability
 
 - **Metrics:** request count, latency histogram, TTFT histogram, tokens, cost, errors by provider and status, in-flight requests, retries, cache hits, breaker state, auth failures.
-- **Label rules:** labels are limited to alias, provider, model, and status class. Key IDs are never labels; per-key data lives in the usage table. The note explains cardinality.
+- **Label rules:** labels are limited to alias, provider, and status class. Provider model IDs are not labels; per-model detail lives in the usage table. Key IDs are never labels; per-key data lives in the usage table. The note explains cardinality.
 - **Logs:** JSON, one line per request, with `request_id`. Prompts and completions are never logged by default.
 - **Tracing:** one OpenTelemetry span per request, with a child span per provider attempt. Off unless `OTEL_EXPORTER_OTLP_ENDPOINT` is set.
 - Ships with a Grafana dashboard JSON and two alert rules (error rate, p95 TTFT).
@@ -345,8 +345,8 @@ Semantic cache, request and response guardrail hook, a third provider, per-key m
 **Graceful shutdown, in the order Kubernetes actually runs it:**
 
 1. The pod is marked terminating, and endpoint removal begins in parallel.
-2. The `preStop` hook runs `sleep 10`. This gives endpoints and the ingress time to stop sending traffic, and it is what actually prevents dropped requests.
-3. SIGTERM is delivered. The app sets `draining = true`, so `/readyz` fails as a safety net, and new requests get 503.
+2. The `preStop` hook calls `POST /internal/drain` over loopback (the route answers only `127.0.0.1`). The app sets `draining = true`, so `/readyz` fails and new requests get 503 with `Retry-After: 1`. The route sleeps 10 s before answering, which gives endpoints and the ingress time to stop sending traffic; this is what actually prevents dropped requests.
+3. SIGTERM is delivered after the hook returns. Uvicorn owns SIGTERM handling, which is why draining is triggered from `preStop` rather than from the signal.
 4. Uvicorn stops accepting connections and waits for in-flight requests and streams, bounded by `--timeout-graceful-shutdown` = `shutdown.drain_s`.
 5. `terminationGracePeriodSeconds` ≥ preStop sleep + `drain_s` + a small margin, so the kubelet never sends SIGKILL to a stream that is still running.
 
@@ -361,7 +361,7 @@ Semantic cache, request and response guardrail hook, a third provider, per-key m
 ### 8.4 State and scaling in two steps
 
 1. **K1: single replica.** SQLite on a PVC, in-memory limiter, cache, and breaker. Deliberately simple and correct.
-2. **K2: scale out.** Rate limiting moves to Redis (atomic token bucket in a Lua script), and keys and usage move to Postgres, behind the existing `Limiter` and `Store` interfaces. Then the deployment runs multiple replicas with RollingUpdate, a PDB, and an HPA on CPU (or in-flight requests through a custom-metrics adapter, as a stretch). **The pipeline code does not change; that is the test of the interface design.**
+2. **K2: scale out.** Rate limiting moves to Redis (atomic token bucket in a Lua script), and keys and usage move to Postgres, behind the existing `Limiter` and `Store` interfaces. Then the deployment runs multiple replicas with RollingUpdate, a PDB, and an HPA on CPU. Scaling on in-flight requests through a custom-metrics adapter is a stretch goal. **The pipeline code does not change; that is the test of the interface design.**
    - The cache and circuit breaker stay per replica. The cache hit rate drops by roughly the replica count, and each replica learns about provider failures on its own. Both are accepted trade-offs and get one paragraph in the K2 note.
 
 ### 8.5 Cluster baseline (M1.5)
@@ -429,6 +429,11 @@ docs/
 | D10 | K1 uses Recreate and has no PDB or HPA. | A ReadWriteOnce volume makes rolling updates and autoscaling unsafe. |
 | D11 | NetworkPolicy is limited to DNS + 443. | Vanilla NetworkPolicy cannot match hostnames. |
 | D12 | Size budget is 2,000 lines; tracing is the first thing cut. | Realistic for this feature set; the principle still holds. |
+| D13 | Draining starts from a `preStop` call to a loopback-only `/internal/drain`. | Uvicorn owns SIGTERM; an HTTP call is simple to trigger and to test. |
+| D14 | A client disconnect is stored as status 499. | Separates cancellations from real errors in usage and metrics. |
+| D15 | Temperature passes through unchanged; values above 1 are clamped to 1 for Anthropic targets. | Both providers define 0–1 the same way; only OpenAI allows hotter. A rescale would change meaning. |
+| D16 | The K2 HPA scales on CPU. | Works with metrics-server alone; in-flight scaling is a stretch. |
+| D17 | `/v1/models` is stable regardless of breaker state. | A model list that flickers with provider health confuses clients; requests get 503 instead. |
 
 ## 12. Not building (do not reopen)
 

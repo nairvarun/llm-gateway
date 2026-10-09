@@ -4,4 +4,5 @@ A small OpenAI-compatible LLM gateway built for learning: virtual keys, usage an
 
 - Spec: [docs/SPEC.md](docs/SPEC.md)
 - High-level design: [docs/HLD.md](docs/HLD.md)
+- Low-level design: [docs/LLD.md](docs/LLD.md)
 - Per-phase learning notes: [docs/notes/](docs/notes/)
