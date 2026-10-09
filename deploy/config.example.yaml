@@ -1,0 +1,47 @@
+# Gateway configuration. Mounted from a ConfigMap; secrets come from environment variables.
+# Model IDs and prices are PLACEHOLDERS: verify them against each provider before use.
+
+providers:
+  openai:
+    base_url: https://api.openai.com/v1
+    api_key_env: OPENAI_API_KEY
+  anthropic:
+    base_url: https://api.anthropic.com
+    api_key_env: ANTHROPIC_API_KEY
+    default_max_tokens: 1024
+
+models:                       # client-facing aliases; first target is primary
+  fast:
+    targets:
+      - {provider: openai, model: gpt-4o-mini}
+      - {provider: anthropic, model: claude-haiku-latest}
+  smart:
+    targets:
+      - {provider: anthropic, model: claude-sonnet-latest}
+
+pricing:                      # USD per 1M tokens, keyed by provider model ID
+  gpt-4o-mini: {input: 0.15, output: 0.60}
+  claude-haiku-latest: {input: 0.80, output: 4.00}
+  claude-sonnet-latest: {input: 3.00, output: 15.00}
+
+stages:
+  cache: {enabled: true, max_entries: 1000, ttl_s: 300}
+  budget: {enabled: true}
+
+timeouts:
+  connect_s: 3
+  first_byte_s: 20            # request sent -> first chunk (or full body)
+  idle_s: 30                  # max gap between chunks once streaming
+  total_s: 300                # hard ceiling for any single request
+
+retries:
+  max_attempts: 3             # retries and fallbacks combined
+  backoff_base_s: 0.25        # full jitter: sleep uniform(0, base * 2**n)
+
+breaker:
+  failure_threshold: 5
+  open_s: 30
+
+shutdown:
+  drain_s: 330                # >= timeouts.total_s
+  drain_delay_s: 10           # /internal/drain waits this long for the ingress to catch up
