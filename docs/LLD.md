@@ -57,9 +57,8 @@ All stages communicate through one mutable `RequestContext` and return one `Gate
 # gateway/context.py
 @dataclass(frozen=True)
 class Target:
-    provider: str  # "openai" | "anthropic"
-    model: str  # provider model ID
-
+    provider: str            # "openai" | "anthropic"
+    model: str               # provider model ID
 
 @dataclass
 class Usage:
@@ -67,31 +66,29 @@ class Usage:
     output_tokens: int
     estimated: bool = False
 
-
 @dataclass
 class RequestContext:
     request_id: str
     body: ChatRequest
-    alias: str  # == body.model
-    bearer: str | None = None  # raw Authorization token; auth clears it
+    alias: str                               # == body.model
+    bearer: str | None = None                # raw Authorization token; auth clears it
     key: VirtualKey | None = None
     target: Target | None = None
     attempts: int = 0
     started_at: float = field(default_factory=time.monotonic)
     first_byte_at: float | None = None
     usage: Usage | None = None
-    cache_mode: str = "default"  # "default" | "bypass", from x-gateway-cache
+    cache_mode: str = "default"             # "default" | "bypass", from x-gateway-cache
     cache_hit: bool = False
     status: int = 200
-    error: GatewayError | None = None  # set when the stream ends in error
-    output_chars: int = 0  # for token estimation
-
+    error: GatewayError | None = None        # set when the stream ends in error
+    output_chars: int = 0                    # for token estimation
 
 @dataclass
 class GatewayResponse:
     status: int = 200
-    body: dict | None = None  # non-streaming
-    stream: AsyncIterator[ChatChunk] | None = None  # streaming
+    body: dict | None = None                       # non-streaming
+    stream: AsyncIterator[ChatChunk] | None = None # streaming
     headers: dict[str, str] = field(default_factory=dict)
 ```
 
@@ -128,22 +125,20 @@ The chain is built once at startup from a fixed list in `app.py`. Each stage is 
 # gateway/stages/base.py
 Next = Callable[[RequestContext], Awaitable[GatewayResponse]]
 
-
 class Stage(Protocol):
     async def __call__(self, ctx: RequestContext, call_next: Next) -> GatewayResponse: ...
-
 
 def build_chain(stages: list[Stage], terminal: Next) -> Next:
     handler = terminal
     for stage in reversed(stages):
-        handler = functools.partial(stage, call_next=handler)  # outermost first
+        handler = functools.partial(stage, call_next=handler)   # outermost first
     return lambda ctx: handler(ctx)
 ```
 
 ```python
 # gateway/app.py (shape, not final code)
 def create_app(cfg: Config) -> FastAPI:
-    deps = Deps.from_config(cfg)  # store, limiter, providers, breakers, cache
+    deps = Deps.from_config(cfg)           # store, limiter, providers, breakers, cache
     stages = [
         Observe(deps.metrics),
         Auth(deps.store),
@@ -158,7 +153,7 @@ def create_app(cfg: Config) -> FastAPI:
     async def chat(request: Request) -> Response:
         if deps.draining:
             raise Unavailable("draining")
-        body = ChatRequest.model_validate(await request.json())  # 400 on failure
+        body = ChatRequest.model_validate(await request.json())   # 400 on failure
         if body.model not in cfg.models:
             raise BadRequest(f"unknown model {body.model!r}", code="model_not_found")
         ctx = RequestContext(request_id=request_id_from(request), body=body, alias=body.model)
@@ -188,7 +183,6 @@ The terminal handler is `Route`; it is the only component that calls a provider.
 # gateway/streams.py
 Outcome = Literal["completed", "error", "cancelled"]
 
-
 async def wrap_stream(
     source: AsyncIterator[StreamItem],
     on_item: Callable[[StreamItem], None] | None,
@@ -198,7 +192,7 @@ async def wrap_stream(
     try:
         async for item in source:
             if on_item:
-                on_item(item)  # cheap, synchronous bookkeeping only
+                on_item(item)          # cheap, synchronous bookkeeping only
             yield item
     except (asyncio.CancelledError, GeneratorExit):
         outcome = "cancelled"
@@ -213,14 +207,12 @@ async def wrap_stream(
 ```python
 _background: set[asyncio.Task] = set()
 
-
 async def shielded(coro: Awaitable[None]) -> None:
     """Run coro to completion even if the caller is cancelled."""
     task = asyncio.ensure_future(coro)
-    _background.add(task)  # keep a reference so it is not GC'd
+    _background.add(task)                      # keep a reference so it is not GC'd
     task.add_done_callback(_background.discard)
     await asyncio.shield(task)
-
 
 async def drain_background(timeout: float) -> None:  # called at shutdown
     if _background:
@@ -258,21 +250,18 @@ Each stage below lists what it reads from and writes to the context, and its log
 ```python
 async def __call__(self, ctx, call_next):
     m.in_flight.inc()
-    span = tracing.start_request_span(ctx)  # no-op when tracing is off
+    span = tracing.start_request_span(ctx)          # no-op when tracing is off
     try:
         resp = await call_next(ctx)
     except GatewayError as e:
         ctx.status = e.status
-        self.finish(ctx, span)
-        raise
+        self.finish(ctx, span); raise
     except Exception:
         ctx.status = 500
-        self.finish(ctx, span)
-        raise
+        self.finish(ctx, span); raise
     if resp.stream is None:
         ctx.status = resp.status
-        self.finish(ctx, span)
-        return resp
+        self.finish(ctx, span); return resp
     resp.stream = wrap_stream(resp.stream, None, lambda _: self.finish_async(ctx, span))
     return resp
 ```
@@ -297,12 +286,10 @@ async def __call__(self, ctx, call_next):
         resp = await call_next(ctx)
     except GatewayError as e:
         ctx.status = e.status
-        await shielded(self.record(ctx))
-        raise
+        await shielded(self.record(ctx)); raise
     if resp.stream is None:
         ctx.status = resp.status
-        await shielded(self.record(ctx))
-        return resp
+        await shielded(self.record(ctx)); return resp
     resp.stream = wrap_stream(resp.stream, None, lambda outcome: self.record_stream(ctx, outcome))
     return resp
 ```
@@ -354,7 +341,7 @@ async def __call__(self, ctx):
     if ctx.body.stream:
         first, upstream = await self.attempts.open_stream(ctx, targets)  # retries happen here
         return GatewayResponse(stream=self.relay(ctx, first, upstream))
-    body = await self.attempts.complete(ctx, targets)  # and here
+    body = await self.attempts.complete(ctx, targets)                    # and here
     return GatewayResponse(body=body)
 ```
 
@@ -369,10 +356,8 @@ An adapter turns a `ChatRequest` into one provider's HTTP call and turns the rep
 class Provider(Protocol):
     name: str
     supports_tools: bool
-
     async def complete(self, req: ChatRequest, model: str) -> ChatResponse: ...
     def stream(self, req: ChatRequest, model: str) -> AsyncIterator[ChatChunk]: ...
-
 
 @dataclass
 class ProviderError(Exception):
@@ -524,25 +509,17 @@ async def relay(self, ctx, first, upstream):
                 async with asyncio.timeout(min(self.t.idle_s, deadline - now())):
                     item = await anext(upstream)
             except StopAsyncIteration:
-                outcome = "ok"
-                break
+                outcome = "ok"; break
     except (TimeoutError, ProviderError) as e:
         outcome = "failed"
-        err = (
-            UpstreamTimeout()
-            if isinstance(e, TimeoutError) or e.kind.startswith("timeout")
-            else UpstreamFailed()
-        )
+        err = UpstreamTimeout() if isinstance(e, TimeoutError) or e.kind.startswith("timeout") else UpstreamFailed()
         ctx.status, ctx.error = err.status, err
         yield StreamError(err)
     finally:
         await upstream.aclose()
-        if outcome == "ok":
-            breaker.record_success()
-        elif outcome == "failed":
-            breaker.record_failure()
-        else:
-            breaker.release()  # client cancelled: says nothing about the provider
+        if outcome == "ok": breaker.record_success()
+        elif outcome == "failed": breaker.record_failure()
+        else: breaker.release()   # client cancelled: says nothing about the provider
 ```
 
 ### Circuit breaker
@@ -553,20 +530,17 @@ async def relay(self, ctx, first, upstream):
 # gateway/resilience/breaker.py
 class Breaker:
     def __init__(self, threshold: int, open_s: float): ...
-
     state: Literal["closed", "open", "half_open"] = "closed"
-    failures = 0
-    opened_at = 0.0
-    trial_in_flight = False
+    failures = 0; opened_at = 0.0; trial_in_flight = False
 
-    def can_try(self) -> bool:  # pure check, used to build `available`
+    def can_try(self) -> bool:                 # pure check, used to build `available`
         if self.state == "open" and now() - self.opened_at >= self.open_s:
             self.state, self.trial_in_flight = "half_open", False
         if self.state == "half_open":
             return not self.trial_in_flight
         return self.state == "closed"
 
-    def begin(self) -> None:  # called only for the chosen target
+    def begin(self) -> None:                   # called only for the chosen target
         if self.state == "half_open":
             self.trial_in_flight = True
 
@@ -578,7 +552,7 @@ class Breaker:
         if self.state == "half_open" or self.failures >= self.threshold:
             self.state, self.opened_at, self.trial_in_flight = "open", now(), False
 
-    def release(self) -> None:  # neutral outcome: free the trial slot
+    def release(self) -> None:                 # neutral outcome: free the trial slot
         self.trial_in_flight = False
 
     def record(self, err: ProviderError) -> None:  # maps the classification table
@@ -657,7 +631,7 @@ Each key gets a bucket that holds up to `rpm` tokens and refills at `rpm / 60` t
 ```python
 class MemoryLimiter:
     def __init__(self):
-        self.buckets: dict[str, tuple[float, float]] = {}  # key_id -> (tokens, updated_at)
+        self.buckets: dict[str, tuple[float, float]] = {}   # key_id -> (tokens, updated_at)
 
     async def acquire(self, key_id: str, rpm: int) -> tuple[bool, float]:
         now, rate = time.monotonic(), rpm / 60
@@ -667,7 +641,7 @@ class MemoryLimiter:
             self.buckets[key_id] = (tokens - 1, now)
             return True, 0.0
         self.buckets[key_id] = (tokens, now)
-        return False, (1 - tokens) / rate  # seconds until one token exists
+        return False, (1 - tokens) / rate                  # seconds until one token exists
 ```
 
 No lock is needed because nothing in `acquire` awaits. The K2 `RedisLimiter` runs the same arithmetic inside one Lua script, keyed `rl:{key_id}`, using Redis `TIME` and a 120-second expiry. That makes the check-and-take atomic across replicas, which a GET followed by a SET would not be.
@@ -693,50 +667,36 @@ Configuration has two sources: environment variables for secrets and deployment 
 class ProviderCfg(BaseModel):
     base_url: HttpUrl
     api_key_env: str
-    default_max_tokens: int = 1024  # used by the Anthropic adapter
-
+    default_max_tokens: int = 1024           # used by the Anthropic adapter
 
 class TargetCfg(BaseModel):
     provider: str
     model: str
 
-
 class ModelCfg(BaseModel):
     targets: list[TargetCfg] = Field(min_length=1)
 
-
 class Price(BaseModel):
-    input: float = Field(ge=0)  # USD per 1M tokens
+    input: float = Field(ge=0)               # USD per 1M tokens
     output: float = Field(ge=0)
-
 
 class CacheCfg(BaseModel):
     enabled: bool = True
     max_entries: int = Field(1000, gt=0)
     ttl_s: float = Field(300, gt=0)
 
-
 class StagesCfg(BaseModel):
     cache: CacheCfg = CacheCfg()
     budget: Toggle = Toggle(enabled=True)
 
-
 class Timeouts(BaseModel):
-    connect_s: float = 3
-    first_byte_s: float = 20
-    idle_s: float = 30
-    total_s: float = 300
-
+    connect_s: float = 3; first_byte_s: float = 20; idle_s: float = 30; total_s: float = 300
 
 class Retries(BaseModel):
-    max_attempts: int = Field(3, ge=1, le=5)
-    backoff_base_s: float = 0.25
-
+    max_attempts: int = Field(3, ge=1, le=5); backoff_base_s: float = 0.25
 
 class BreakerCfg(BaseModel):
-    failure_threshold: int = Field(5, ge=1)
-    open_s: float = Field(30, gt=0)
-
+    failure_threshold: int = Field(5, ge=1); open_s: float = Field(30, gt=0)
 
 class Config(BaseModel):
     providers: dict[Literal["openai", "anthropic"], ProviderCfg]
@@ -746,7 +706,7 @@ class Config(BaseModel):
     timeouts: Timeouts = Timeouts()
     retries: Retries = Retries()
     breaker: BreakerCfg = BreakerCfg()
-    shutdown: ShutdownCfg = ShutdownCfg()  # drain_s: float = 330
+    shutdown: ShutdownCfg = ShutdownCfg()    # drain_s: float = 330
 
     @model_validator(mode="after")
     def cross_checks(self) -> "Config": ...

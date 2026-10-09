@@ -69,7 +69,7 @@ class RequestContext:
     request_id: str
     body: ChatRequest
     key: VirtualKey | None = None
-    target: Target | None = None  # provider + model actually used
+    target: Target | None = None          # provider + model actually used
     attempts: int = 0
     started_at: float = field(default_factory=time.monotonic)
     first_byte_at: float | None = None
@@ -77,7 +77,6 @@ class RequestContext:
     usage_estimated: bool = False
     cache_hit: bool = False
     status: int | None = None
-
 
 class Stage(Protocol):
     async def __call__(self, ctx: RequestContext, call_next: Next) -> GatewayResponse: ...
@@ -101,7 +100,6 @@ Rules for wrappers:
 class Provider(Protocol):
     name: str
     supports_tools: bool
-
     async def complete(self, req: ChatRequest, model: str) -> ChatResponse: ...
     def stream(self, req: ChatRequest, model: str) -> AsyncIterator[ChatChunk]: ...
 ```
@@ -237,13 +235,8 @@ CREATE INDEX usage_key_ts ON usage (key_id, ts);
 ```python
 class Store(Protocol):
     async def get_key_by_hash(self, hash: str) -> VirtualKey | None: ...
-    async def create_key(
-        self,
-        name: str,
-        allowed_models: list[str] | None,
-        rpm_limit: int | None,
-        monthly_budget_usd: float | None,
-    ) -> tuple[VirtualKey, str]: ...
+    async def create_key(self, name: str, allowed_models: list[str] | None,
+                         rpm_limit: int | None, monthly_budget_usd: float | None) -> tuple[VirtualKey, str]: ...
     async def revoke_key(self, key_id: str) -> bool: ...
     async def record_usage(self, row: UsageRow) -> None: ...
     async def spend_this_month(self, key_id: str) -> float: ...
