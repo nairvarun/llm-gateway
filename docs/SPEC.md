@@ -373,6 +373,64 @@ The first target is a fresh cluster. Phases 0 and 1 run locally in Docker and do
 - metrics-server, which the K2 HPA depends on.
 - A Prometheus stack. Use the Prometheus Operator with a `ServiceMonitor`, or scrape annotations until one exists.
 
+On the chosen platform (8.6), the first two come from the EKS Auto Mode baseline manifests; metrics-server and Prometheus are added later (see the table in 8.6).
+
+### 8.6 Target platform: EKS Auto Mode on AWS
+
+The cluster is Amazon EKS in Auto Mode, created with Terraform. Auto Mode means AWS runs the nodes and the core add-ons (VPC CNI, CoreDNS, kube-proxy, EBS CSI driver, ALB controller), so the cluster has nothing to patch or scale by hand and the project stays focused on the gateway.
+
+**Split of responsibilities.** Terraform (`infra/eks/`) creates AWS resources only. Everything inside the cluster is a Kustomize manifest applied with `kubectl`. Terraform therefore never needs cluster credentials, and there is no Kubernetes or Helm provider whose state can drift from the cluster.
+
+| Layer | Path | Contents |
+| --- | --- | --- |
+| AWS infrastructure | `infra/eks/` | VPC, EKS Auto Mode cluster, IAM roles, access entries, control-plane logs, ECR repository |
+| Cluster baseline (once per cluster) | `deploy/k8s/cluster/eks-auto/` | Default gp3 StorageClass, ALB IngressClass and IngressClassParams, NetworkPolicy enforcement ConfigMap |
+| Gateway | `deploy/k8s/overlays/eks/` | The `k1` overlay plus the ECR image, amd64 node selector, and ALB annotations |
+
+**AWS resources**
+
+| Resource | Setting | Why |
+| --- | --- | --- |
+| VPC | 3 AZs; private /20 per AZ for nodes and pods, public /24 per AZ for the ALB | Pods take VPC IPs, so private subnets are large; subnets carry the `kubernetes.io/role/elb` and `internal-elb` tags Auto Mode uses to place load balancers |
+| NAT gateway | One, shared (`single_nat_gateway = true`) | Cheaper; an AZ outage can cut egress, which is acceptable for K1 |
+| EKS cluster | Kubernetes 1.35, Auto Mode with `system` and `general-purpose` node pools, `authentication_mode = API` | Compute, block storage and load balancing must be enabled together; self-managed add-ons are not bootstrapped |
+| API endpoint | Public and private; public access limited by `api_public_access_cidrs` | Reachable for `kubectl` without a VPN, but only from known addresses |
+| Upgrade policy | `STANDARD` | EKS upgrades the cluster at end of standard support instead of moving it into paid extended support |
+| IAM | Cluster role with the five Auto Mode managed policies; node role with `AmazonEKSWorkerNodeMinimalPolicy` and `AmazonEC2ContainerRegistryPullOnly` | Least privilege that Auto Mode supports |
+| Access | The identity running `terraform apply` is cluster admin; more via `admin_principal_arns` | Access entries instead of the old `aws-auth` ConfigMap |
+| Logs | `audit` and `authenticator` to CloudWatch with 30-day retention | Who did what to the cluster, without paying for every API log |
+| ECR | Immutable tags, scan on push, keep the last 20 images | A tag always means one image |
+| State | Local by default; an S3 backend with native locking is ready to enable | No extra AWS setup for a single operator |
+
+**How the M1.5 baseline maps to Auto Mode**
+
+| Baseline item | On EKS Auto Mode |
+| --- | --- |
+| Default StorageClass | Not created by Auto Mode; the baseline adds `auto-ebs-gp3` (provisioner `ebs.csi.eks.amazonaws.com`, gp3, encrypted, `WaitForFirstConsumer`) |
+| Ingress controller | Built in; the baseline adds IngressClass `alb` (controller `eks.amazonaws.com/alb`) with internet-facing IngressClassParams |
+| NetworkPolicy enforcement | Off until the `amazon-vpc-cni` ConfigMap sets `enable-network-policy-controller: "true"`; the baseline adds it |
+| metrics-server | Not included; added with K2, the only consumer |
+| Prometheus | Pods carry scrape annotations; a Prometheus stack (self-run or Amazon Managed Prometheus) is a separate step |
+
+**ALB settings for streaming** (annotations on the gateway Ingress)
+
+- Health check path `/readyz`; the default `/` returns 404 and the ALB would never send traffic.
+- `idle_timeout.timeout_seconds=330`: the default 60 s would cut long streams.
+- `deregistration_delay.timeout_seconds=330`: a draining pod keeps its in-flight streams for up to `timeouts.total_s`.
+- `target-type: ip`, so the ALB sends traffic straight to pod IPs.
+
+**Security gaps to close before sharing the endpoint**
+
+- The ALB listens on plain HTTP, so virtual keys cross the internet unencrypted. Until an ACM certificate and an HTTPS listener are added, `inbound-cidrs` on the Ingress is narrowed to the operator's IP, or the gateway is reached with `kubectl port-forward`.
+- `api_public_access_cidrs` defaults to `0.0.0.0/0` and is narrowed in `terraform.tfvars`.
+
+**Operations**
+
+- **Deploy order:** `terraform apply` → `aws eks update-kubeconfig` → apply the baseline → build the image for `linux/amd64` and push to ECR → create `secrets.env` → apply the `eks` overlay.
+- **Teardown order:** delete the gateway's Kubernetes objects first, so Auto Mode removes the ALB and the EBS volume it created, then `terraform destroy`. The reverse order orphans them and the VPC cannot be deleted.
+- **Cost:** the control plane, NAT gateway, Auto Mode EC2 instances (plus a per-instance management fee), the ALB and the EBS volume bill around the clock. The cluster is destroyed when not in use.
+- **Drain timing:** the ALB takes a few seconds to stop routing to a terminating pod. If deploys show errors, raise `shutdown.drain_delay_s` to 15–20 s and `terminationGracePeriodSeconds` with it.
+
 ## 9. Testing
 
 - **Unit:** each stage tested alone with a fake `call_next`.
@@ -399,17 +457,24 @@ gateway/
   context.py        # RequestContext, GatewayResponse
   schemas.py        # OpenAI-shaped request/response models
   errors.py         # OpenAI error shape, status mapping
+  sse.py, streams.py, pricing.py, metrics.py, tracing.py, admin.py
   providers/        # base.py, openai.py, anthropic.py
   stages/           # observe.py, auth.py, usage.py, rate_limit.py,
                     # budget.py, cache.py, route.py
-  resilience/       # timeouts.py, retry.py, breaker.py (used by route)
-  store/            # base.py, sqlite.py  (K2: postgres.py)
+  resilience/       # retry.py, breaker.py (used by route)
+  store/            # base.py, sqlite.py, schema.sql  (K2: postgres.py)
   limiter/          # base.py, memory.py  (K2: redis.py)
-  metrics.py
-tests/
-deploy/             # Dockerfile, kustomize base + k1/k2 overlays, dashboards, alerts
+tests/              # unit/, stages/, providers/, integration/, fakes/
+Dockerfile
+deploy/
+  k8s/base/         # Deployment, Service, Ingress, NetworkPolicy, config.yaml
+  k8s/overlays/     # k1 (any cluster), eks (k1 + ECR image + ALB)
+  k8s/cluster/      # eks-auto: one-time cluster baseline
+  observability/    # Grafana dashboard, alert rules
+infra/
+  eks/              # Terraform: VPC, EKS Auto Mode, IAM, ECR
 docs/
-  SPEC.md
+  SPEC.md, HLD.md, LLD.md
   notes/            # one short note per phase
 ```
 
@@ -434,17 +499,22 @@ docs/
 | D15 | Temperature passes through unchanged; values above 1 are clamped to 1 for Anthropic targets. | Both providers define 0–1 the same way; only OpenAI allows hotter. A rescale would change meaning. |
 | D16 | The K2 HPA scales on CPU. | Works with metrics-server alone; in-flight scaling is a stretch. |
 | D17 | `/v1/models` is stable regardless of breaker state. | A model list that flickers with provider health confuses clients; requests get 503 instead. |
+| D18 | The cluster is EKS Auto Mode on AWS. | AWS runs nodes and core add-ons, so effort goes into the gateway, not cluster operations. |
+| D19 | Terraform manages AWS resources only; in-cluster objects are Kustomize manifests applied with `kubectl`. | Terraform never needs cluster credentials, and there is no Kubernetes provider state to drift. |
+| D20 | One shared NAT gateway and local Terraform state by default. | Lower cost and no extra setup for a single operator; both are one setting to change. |
+| D21 | The ALB health-checks `/readyz` and its idle and deregistration timeouts are 330 s. | Matches the gateway's readiness and the longest allowed stream. |
+| D22 | HTTP-only ALB until a certificate exists, with `inbound-cidrs` narrowed meanwhile. | TLS needs a domain; until then exposure is limited instead of opened. |
 
 ## 12. Not building (do not reopen)
 
-Admin UI, orgs and multi-tenancy, plugin or hook system, SSO, embeddings and image endpoints, tool-call translation across providers (stretch only), more than three providers, prompt management, hot config reload, hard (reservation-based) budgets, hostname-based egress policy, semantic caching before Phase 6 is done.
+Admin UI, orgs and multi-tenancy, plugin or hook system, Terraform-managed Kubernetes objects, SSO, embeddings and image endpoints, tool-call translation across providers (stretch only), more than three providers, prompt management, hot config reload, hard (reservation-based) budgets, hostname-based egress policy, semantic caching before Phase 6 is done.
 
 ## 13. Milestones
 
 | Milestone | Contents | Done when |
 | --- | --- | --- |
 | M1 | Phases 0 and 1, running in Docker locally | Both providers stream through Docker with virtual keys |
-| M1.5 | Cluster baseline (8.5) | A test pod can use a PVC, be reached through ingress, and be scraped |
-| M2 | Phases 2 and 3, first deploy (K1) | Usage and limits work in-cluster; Recreate deploy observed |
+| M1.5 | EKS Auto Mode via Terraform and the cluster baseline (8.5, 8.6) | `terraform apply` and the baseline succeed; a test pod can use a PVC and be reached through the ALB |
+| M2 | Phases 2 and 3, first deploy (K1) with the `eks` overlay | Usage and limits work in-cluster; Recreate deploy observed; ALB serves streams end to end |
 | M3 | Phases 4 and 5, dashboards, load test, chaos tests | Dashboards show a chaos run; resource limits set from the load test |
 | M4 | Phase 6, then K2 scale-out | Multiple replicas behind the HPA, rolling deploy with no dropped streams, pipeline code unchanged |

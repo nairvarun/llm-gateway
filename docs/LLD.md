@@ -858,59 +858,62 @@ Build in spec phase order. Each phase ends with its tests green, its metric visi
 
 **Phase 0: core proxy**
 
-- [ ] `pyproject.toml`, ruff config, empty package, `pytest` running
-- [ ] `schemas.py`, `errors.py`, `context.py`, `sse.py` with unit tests
-- [ ] `config.py` with cross-checks; `test_missing_pricing_fails_startup`
-- [ ] `providers/openai.py` and `providers/anthropic.py` with recorded fixtures
-- [ ] `streams.py` (`wrap_stream`, `shielded`) with unit tests
-- [ ] `stages/route.py` without retries: one target, first-chunk peek, relay
-- [ ] `app.py`: handler, `to_http`, `/healthz`; the fake upstream and the server fixtures
-- [ ] `test_first_chunk_before_upstream_finishes`, `test_disconnect_closes_upstream`, `test_include_usage_injected_and_stripped`, `test_tools_skip_incapable_targets`
-- [ ] Note: `docs/notes/phase-0-streaming.md`
+- [x] `pyproject.toml`, ruff config, empty package, `pytest` running
+- [x] `schemas.py`, `errors.py`, `context.py`, `sse.py` with unit tests
+- [x] `config.py` with cross-checks; `test_missing_pricing_fails_startup`
+- [x] `providers/openai.py` and `providers/anthropic.py` with recorded fixtures
+- [x] `streams.py` (`wrap_stream`, `shielded`) with unit tests
+- [x] `stages/route.py` without retries: one target, first-chunk peek, relay
+- [x] `app.py`: handler, `to_http`, `/healthz`; the fake upstream and the server fixtures
+- [x] `test_first_chunk_before_upstream_finishes`, `test_disconnect_closes_upstream`, `test_include_usage_injected_and_stripped`, `test_tools_skip_incapable_targets`
+- [x] Note: `docs/notes/phase-0-streaming.md`
 
 **Phase 1: keys and auth**
 
-- [ ] `store/schema.sql`, `store/sqlite.py` (key methods, `ping`)
-- [ ] `stages/auth.py`; `admin.py` with `require_admin`
-- [ ] `test_virtual_key_on_admin_is_403`; `/readyz`
-- [ ] Note: `phase-1-keys.md`
+- [x] `store/schema.sql`, `store/sqlite.py` (key methods, `ping`)
+- [x] `stages/auth.py`; `admin.py` with `require_admin`
+- [x] `test_virtual_key_on_admin_is_403`; `/readyz`
+- [x] Note: `phase-1-keys.md`
 
 **Phase 2: usage and cost**
 
-- [ ] `pricing.py`; `record_usage`, `usage_summary`
-- [ ] `stages/usage.py`; the admin usage route
-- [ ] `test_disconnect_writes_estimated_usage`
-- [ ] Note: `phase-2-usage.md`
+- [x] `pricing.py`; `record_usage`, `usage_summary`
+- [x] `stages/usage.py`; the admin usage route
+- [x] `test_disconnect_writes_estimated_usage`
+- [x] Note: `phase-2-usage.md`
 
 **Phase 3: limits and budgets**
 
-- [ ] `limiter/memory.py` with `FakeClock`; `stages/rate_limit.py`
-- [ ] `spend_this_month`; `stages/budget.py`
-- [ ] `test_token_bucket_refill`; a concurrency test showing the soft-cap overspend
-- [ ] Note: `phase-3-limits.md`
+- [x] `limiter/memory.py` with `FakeClock`; `stages/rate_limit.py`
+- [x] `spend_this_month`; `stages/budget.py`
+- [x] `test_token_bucket_refill`; a concurrency test showing the soft-cap overspend
+- [x] Note: `phase-3-limits.md`
 
 **Phase 4: resilience**
 
-- [ ] `resilience/breaker.py`, `resilience/retry.py`; four timeouts in route
-- [ ] `test_retry_then_fallback`, `test_no_retry_after_first_byte`, `test_idle_timeout_sends_sse_error`, both breaker tests
-- [ ] Note: `phase-4-resilience.md`
+- [x] `resilience/breaker.py`, `resilience/retry.py`; four timeouts in route
+- [x] `test_retry_then_fallback`, `test_no_retry_after_first_byte`, `test_idle_timeout_sends_sse_error`, both breaker tests
+- [x] Note: `phase-4-resilience.md`
 
 **Phase 5: observability**
 
-- [ ] `metrics.py` and `stages/observe.py`; JSON logging; optional tracing
-- [ ] Grafana dashboard JSON and two alert rules in `deploy/`
-- [ ] Note: `phase-5-observability.md`
+- [x] `metrics.py` and `stages/observe.py`; JSON logging; optional tracing
+- [x] Grafana dashboard JSON and two alert rules in `deploy/`
+- [x] Note: `phase-5-observability.md`
 
 **Phase 6: caching**
 
-- [ ] `stages/cache.py`; `test_cache_scoped_per_key`, TTL and LRU unit tests
-- [ ] Note: `phase-6-cache.md`
+- [x] `stages/cache.py`; `test_cache_scoped_per_key`, TTL and LRU unit tests
+- [x] Note: `phase-6-cache.md`
 
 **Deploy (from M1.5)**
 
-- [ ] Dockerfile (multi-stage, non-root, read-only root filesystem)
-- [ ] Kustomize base plus `k1` overlay (Recreate, PVC); `/internal/drain` and `test_drain_flips_readyz`
-- [ ] K2: `store/postgres.py`, `limiter/redis.py`, `k2` overlay with PDB and HPA
+- [x] Dockerfile (multi-stage, non-root, read-only root filesystem)
+- [x] Kustomize base plus `k1` overlay (Recreate, PVC); `/internal/drain` and `test_drain_flips_readyz`
+- [x] EKS Auto Mode: Terraform in `infra/eks/`, baseline in `deploy/k8s/cluster/eks-auto/`, `eks` overlay (validated, not yet applied)
+- [ ] First apply on AWS: `terraform apply`, baseline, image push, `eks` overlay; smoke test through the ALB
+- [ ] TLS: ACM certificate and HTTPS listener on the ALB
+- [ ] K2: `store/postgres.py`, `limiter/redis.py`, `k2` overlay with PDB, HPA and metrics-server
 
 **Decisions taken in review**
 
@@ -919,6 +922,143 @@ Build in spec phase order. Each phase ends with its tests green, its metric visi
 - [x] Temperature passes through unchanged; values above 1 are clamped to 1 for Anthropic targets (D15).
 - [x] The K2 HPA scales on CPU (D16); `/v1/models` is stable regardless of breaker state (D17).
 - [ ] Real model IDs and prices: verified when provider API keys are added.
+
+## Infrastructure: Terraform for EKS Auto Mode
+
+Terraform in `infra/eks/` creates the AWS side; the cluster's contents stay in Kustomize. Terraform never talks to the Kubernetes API, so it needs only AWS credentials and its state holds no Kubernetes objects (spec D19).
+
+**Versions.** Terraform ≥ 1.10, AWS provider `~> 6.0` (locked at 6.68.0 in `.terraform.lock.hcl`, with hashes for Linux and macOS on amd64 and arm64), `terraform-aws-modules/vpc/aws` `~> 6.7` (6.7.3). Validated with Terraform 1.16.5; not yet planned against an account.
+
+### Files
+
+| File | Resources | Notes |
+| --- | --- | --- |
+| `versions.tf` | provider `aws` with `default_tags` (`Project`, `ManagedBy`) | S3 backend block with `use_lockfile = true` is present but commented out |
+| `variables.tf` | inputs below | `region` has no default |
+| `vpc.tf` | `module.vpc`, `data.aws_availability_zones` | Opt-in AZs excluded; first `az_count` AZs used |
+| `iam.tf` | `aws_iam_role.cluster`, `aws_iam_role.node`, policy attachments via `for_each` | Cluster trust allows `sts:AssumeRole` and `sts:TagSession` |
+| `eks.tf` | `aws_cloudwatch_log_group.cluster`, `aws_eks_cluster.this`, `aws_eks_access_entry.admin`, `aws_eks_access_policy_association.admin` | Log group created first so retention is set |
+| `ecr.tf` | `aws_ecr_repository.gateway`, `aws_ecr_lifecycle_policy.gateway` | Immutable tags, scan on push, keep 20 |
+| `outputs.tf` | `cluster_name`, `region`, `cluster_endpoint`, `configure_kubectl`, `ecr_repository_url`, `vpc_id` | `configure_kubectl` is a ready-to-run command |
+
+### Inputs
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `region` | required | AWS region |
+| `name` | `llm-gateway` | Prefix for the cluster, VPC, roles and repository |
+| `kubernetes_version` | `1.35` | Raised one minor version at a time |
+| `vpc_cidr` | `10.0.0.0/16` | VPC range |
+| `az_count` | `3` | Validated to 2–4 |
+| `single_nat_gateway` | `true` | One NAT (cheaper) vs one per AZ |
+| `api_public_access_cidrs` | `["0.0.0.0/0"]` | Who can reach the public API endpoint; narrow it |
+| `admin_principal_arns` | `[]` | Extra cluster admins (access entries) |
+| `control_plane_log_types` | `["audit", "authenticator"]` | CloudWatch control-plane logs |
+| `log_retention_days` | `30` | Log group retention |
+| `deletion_protection` | `false` | EKS deletion protection |
+| `ecr_force_delete` | `false` | Let `destroy` delete a repository that still has images |
+
+### Network layout
+
+Subnets are computed from `vpc_cidr` so there are no hand-written ranges:
+
+- Private: `cidrsubnet(vpc_cidr, 4, i)`, a /20 per AZ (10.0.0.0/20, 10.0.16.0/20, 10.0.32.0/20). Pods get VPC IPs from the CNI, so these are large.
+- Public: `cidrsubnet(vpc_cidr, 8, 48 + i)`, a /24 per AZ (10.0.48.0/24, …), which stays clear of the private ranges.
+- Tags: public subnets `kubernetes.io/role/elb = 1`, private `kubernetes.io/role/internal-elb = 1`. Auto Mode uses them to place load balancers.
+
+### The cluster resource
+
+```hcl
+resource "aws_eks_cluster" "this" {
+  name     = var.name
+  version  = var.kubernetes_version
+  role_arn = aws_iam_role.cluster.arn
+
+  access_config {
+    authentication_mode                         = "API"
+    bootstrap_cluster_creator_admin_permissions = true
+  }
+
+  bootstrap_self_managed_addons = false # required by Auto Mode
+
+  # Compute, load balancing and block storage must be enabled (or disabled) together.
+  compute_config {
+    enabled       = true
+    node_pools    = ["general-purpose", "system"]
+    node_role_arn = aws_iam_role.node.arn # cannot change after Auto Mode is on
+  }
+  kubernetes_network_config {
+    elastic_load_balancing {
+      enabled = true
+    }
+  }
+  storage_config {
+    block_storage {
+      enabled = true
+    }
+  }
+
+  vpc_config {
+    subnet_ids              = module.vpc.private_subnets
+    endpoint_private_access = true
+    endpoint_public_access  = true
+    public_access_cidrs     = var.api_public_access_cidrs
+  }
+
+  upgrade_policy {
+    support_type = "STANDARD" # no paid extended support
+  }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.cluster,
+    aws_iam_role_policy_attachment.node,
+    aws_cloudwatch_log_group.cluster,
+  ]
+}
+```
+
+The `depends_on` matters on destroy: if IAM went first, EKS could not delete the instances, security groups and load balancers it created.
+
+### Cluster baseline (`deploy/k8s/cluster/eks-auto/`)
+
+| Manifest | Object | Key fields |
+| --- | --- | --- |
+| `storageclass.yaml` | StorageClass `auto-ebs-gp3` (default) | `provisioner: ebs.csi.eks.amazonaws.com`, `type: gp3`, `encrypted: "true"`, `WaitForFirstConsumer`, topology `eks.amazonaws.com/compute-type: auto` |
+| `ingressclass.yaml` | IngressClassParams `alb` + IngressClass `alb` (default) | `apiVersion: eks.amazonaws.com/v1`, `scheme: internet-facing`, `controller: eks.amazonaws.com/alb` |
+| `network-policy.yaml` | ConfigMap `kube-system/amazon-vpc-cni` | `enable-network-policy-controller: "true"`; without it the gateway's NetworkPolicy is ignored |
+
+### The `eks` overlay (`deploy/k8s/overlays/eks/`)
+
+It builds on `k1` (Recreate, PVC) and adds:
+
+- `images`: `llm-gateway` → the ECR repository URL and the pushed tag (a placeholder until set).
+- Deployment patch: `nodeSelector: kubernetes.io/arch: amd64`. The image is built with `docker buildx build --platform linux/amd64`, including on Apple Silicon.
+- Ingress patch: `ingressClassName: alb` and these annotations, which replace the ingress-nginx ones from the base:
+
+| Annotation | Value | Why |
+| --- | --- | --- |
+| `alb.ingress.kubernetes.io/target-type` | `ip` | Route straight to pod IPs |
+| `alb.ingress.kubernetes.io/healthcheck-path` | `/readyz` | The default `/` is a 404 here, and draining pods must fail the check |
+| `alb.ingress.kubernetes.io/load-balancer-attributes` | `idle_timeout.timeout_seconds=330` | The default 60 s would cut long streams |
+| `alb.ingress.kubernetes.io/target-group-attributes` | `deregistration_delay.timeout_seconds=330` | A draining pod keeps its streams up to `total_s` |
+| `alb.ingress.kubernetes.io/inbound-cidrs` | `0.0.0.0/0` (narrow it) | Limits exposure while the ALB is HTTP-only |
+
+### Runbook
+
+1. `terraform init && terraform plan -out tfplan && terraform apply tfplan` (about 15 minutes).
+2. `$(terraform output -raw configure_kubectl)`.
+3. `kubectl apply -k deploy/k8s/cluster/eks-auto`.
+4. Log in to ECR, `docker buildx build --platform linux/amd64 -t "$ECR:<tag>" --push .`, then set the tag in the overlay.
+5. Fill `deploy/k8s/base/secrets.env`, then `kubectl apply -k deploy/k8s/overlays/eks`.
+6. Create a key over `kubectl port-forward` (the ALB does not route `/admin`), then call `/v1` through the ALB hostname from `kubectl get ingress`.
+
+Teardown is the reverse, with one hard rule: `kubectl delete -k deploy/k8s/overlays/eks` and wait for the PersistentVolume to disappear before `terraform destroy`. Otherwise the ALB and EBS volume are orphaned and the VPC cannot be deleted.
+
+### Verification done so far
+
+- `terraform fmt -check` and `terraform validate` pass; providers and modules download and lock.
+- `kustomize build` renders `overlays/eks` (Recreate, ECR image, amd64 selector, ALB annotations) and `cluster/eks-auto`.
+- Not yet done: `terraform plan` against an account, the first apply, and a smoke test through the ALB.
 
 ## Implementation notes
 

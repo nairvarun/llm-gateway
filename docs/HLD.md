@@ -164,6 +164,24 @@ K1 must use `Recreate`: a ReadWriteOnce volume attaches to one node, so a rollin
 
 **Kubernetes objects**: Deployment, Service, ConfigMap, Secret, NetworkPolicy, Ingress (no `/admin` route), and scrape config. K1 adds a PVC; K2 adds a PDB and an HPA.
 
+### On AWS: EKS Auto Mode
+
+The cluster is EKS Auto Mode, created with Terraform in `infra/eks/`. AWS runs the nodes and the core add-ons, so the only things this project operates are the gateway and its config.
+
+![AWS topology: EKS Auto Mode, K1](img/hld-aws-eks.png)
+
+Terraform creates AWS resources only; everything inside the cluster is a Kustomize manifest applied with `kubectl`, so Terraform never needs cluster credentials.
+
+| Layer | Path | Contents |
+| --- | --- | --- |
+| AWS infrastructure | `infra/eks/` | VPC (3 AZs, one NAT), EKS 1.35 Auto Mode, IAM roles, access entries, logs, ECR |
+| Cluster baseline (once) | `deploy/k8s/cluster/eks-auto/` | Default gp3 StorageClass, ALB IngressClass, NetworkPolicy enforcement |
+| Gateway | `deploy/k8s/overlays/eks/` | `k1` overlay + ECR image, amd64 nodes, ALB health check and 330 s timeouts |
+
+**Deploy:** `terraform apply` → kubeconfig → baseline → push the image to ECR → secrets → `eks` overlay. **Tear down** in reverse, Kubernetes objects first, or the ALB and EBS volume Auto Mode created are orphaned and the VPC cannot be deleted.
+
+**Before sharing the endpoint:** the ALB is HTTP-only until an ACM certificate is added, so `inbound-cidrs` and `api_public_access_cidrs` are narrowed to the operator's IP.
+
 ## Key decisions and trade-offs
 
 Each decision picks the simpler correct option and writes down what it gives up. Numbers match the decisions log in the spec.
@@ -181,6 +199,11 @@ Each decision picks the simpler correct option and writes down what it gives up.
 | D10 | K1 uses Recreate, no PDB or HPA | Zero-downtime deploys in K1 | A ReadWriteOnce volume makes rolling updates hang |
 | D11 | Egress limited to DNS + 443 | Per-host egress control | Vanilla NetworkPolicy cannot match hostnames |
 | D12 | 2,000-line budget; tracing cut first | A tighter core | Realistic for the feature set |
+| D18 | EKS Auto Mode on AWS | Control over node types and add-on versions | AWS runs nodes and add-ons; effort stays on the gateway |
+| D19 | Terraform for AWS only; Kustomize for in-cluster objects | One tool for everything | No cluster credentials in Terraform, no provider state drift |
+| D20 | One NAT gateway, local state | Egress during an AZ outage; shared state | Lower cost and setup for a single operator |
+| D21 | ALB checks `/readyz`, 330 s idle and deregistration | Faster failover of dead connections | Long streams are not cut by the load balancer |
+| D22 | HTTP-only ALB until a certificate exists | Encryption in transit, for now | Needs a domain; exposure is narrowed by CIDR meanwhile |
 
 ## Risks, open questions and milestones
 
@@ -195,6 +218,9 @@ The biggest risks are in streaming accounting and provider format drift. Both ar
 | Core outgrows 2,000 lines | Harder to explain | Cut tracing first, then simplify |
 | Model IDs or prices change | Wrong costs | Verify at build time; startup check that every model has a price |
 | Budget overspend under concurrency | Small overspend per key | Accepted and documented (D8) |
+| Virtual keys sent over plain HTTP | Key theft on the network | `inbound-cidrs` narrowed to the operator; ACM certificate and HTTPS listener before sharing (D22) |
+| Teardown in the wrong order | Orphaned ALB and EBS volume; VPC delete fails | Delete Kubernetes objects before `terraform destroy` (runbook in `infra/eks/README.md`) |
+| Always-on AWS cost | Monthly bill while idle | Destroy the cluster when not in use; one NAT gateway |
 
 **Resolved questions**
 
