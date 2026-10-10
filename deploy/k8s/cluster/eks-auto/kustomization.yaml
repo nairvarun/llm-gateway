@@ -1,0 +1,8 @@
+# One-time cluster baseline for EKS Auto Mode (spec milestone M1.5). Apply after terraform:
+#   kubectl apply -k deploy/k8s/cluster/eks-auto
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - storageclass.yaml
+  - ingressclass.yaml
+  - network-policy.yaml

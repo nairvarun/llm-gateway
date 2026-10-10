@@ -50,11 +50,17 @@ The cluster needs the M1.5 baseline from the spec: a default StorageClass, an in
 and Prometheus scraping (the pod carries `prometheus.io/*` annotations). The dashboard and alert
 rules are in `deploy/observability/`.
 
+### On AWS (EKS Auto Mode)
+
+Terraform for the VPC, cluster and ECR repository is in [infra/eks](infra/eks/README.md), with
+the cluster baseline in `deploy/k8s/cluster/eks-auto` and an `eks` overlay for the ALB and ECR.
+
 ## Status
 
 | Milestone | State |
 | --- | --- |
 | Phases 0–6 (proxy, keys, usage, limits, resilience, observability, cache) | Built and tested |
 | K1 deployment (Dockerfile, Kustomize base + k1 overlay) | Built; image and manifests verified locally, not yet run on a cluster |
+| EKS Auto Mode infrastructure (Terraform, baseline, eks overlay) | Written and validated; not yet applied |
 | K2 scale-out (Postgres store, Redis limiter, PDB, HPA) | Not started (M4) |
 | Real provider keys, model IDs and prices | Pending |

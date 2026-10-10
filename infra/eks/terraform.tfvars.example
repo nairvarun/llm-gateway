@@ -1,0 +1,7 @@
+# Copy to terraform.tfvars and edit. terraform.tfvars is git-ignored.
+region = "eu-west-1"
+
+# Strongly recommended: only your IP can reach the Kubernetes API.
+# api_public_access_cidrs = ["203.0.113.10/32"]
+
+# admin_principal_arns = ["arn:aws:iam::123456789012:role/Admin"]

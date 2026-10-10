@@ -1,0 +1,18 @@
+# Auto Mode ships the EBS CSI capability but creates no StorageClass. This one is the default,
+# so the gateway's PVC needs no class name. WaitForFirstConsumer creates the volume in the AZ
+# where the pod lands.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: auto-ebs-gp3
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: ebs.csi.eks.amazonaws.com
+volumeBindingMode: WaitForFirstConsumer
+allowedTopologies:
+  - matchLabelExpressions:
+      - key: eks.amazonaws.com/compute-type
+        values: [auto]
+parameters:
+  type: gp3
+  encrypted: "true"

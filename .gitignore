@@ -7,3 +7,8 @@ __pycache__/
 *.db-wal
 *.db-shm
 deploy/k8s/base/secrets.env
+infra/**/.terraform/
+infra/**/*.tfstate
+infra/**/*.tfstate.*
+infra/**/terraform.tfvars
+infra/**/*.tfplan

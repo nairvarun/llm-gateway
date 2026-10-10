@@ -1,0 +1,8 @@
+# Auto Mode ignores NetworkPolicy objects until the policy controller is turned on.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: amazon-vpc-cni
+  namespace: kube-system
+data:
+  enable-network-policy-controller: "true"

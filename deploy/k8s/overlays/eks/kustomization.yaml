@@ -1,0 +1,35 @@
+# K1 on EKS Auto Mode: the k1 overlay plus the ECR image, Auto Mode's ALB, and amd64 nodes.
+# Prerequisites: terraform in infra/eks, then the baseline in deploy/k8s/cluster/eks-auto.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../k1
+images:
+  - name: llm-gateway
+    # Set to the ecr_repository_url terraform output and the tag you pushed.
+    newName: ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/llm-gateway
+    newTag: "0.2.0"
+patches:
+  - target: {kind: Deployment, name: gateway}
+    patch: |-
+      - op: add
+        path: /spec/template/spec/nodeSelector
+        value: {kubernetes.io/arch: amd64}   # the image is built for linux/amd64
+  - target: {kind: Ingress, name: gateway}
+    patch: |-
+      - op: add
+        path: /spec/ingressClassName
+        value: alb
+      - op: replace
+        path: /metadata/annotations
+        value:
+          alb.ingress.kubernetes.io/target-type: ip
+          # The ALB must probe readiness, not "/" (which is a 404 here).
+          alb.ingress.kubernetes.io/healthcheck-path: /readyz
+          # Streams can last up to timeouts.total_s (300 s): keep the ALB from cutting them,
+          # and let draining targets finish in-flight streams.
+          alb.ingress.kubernetes.io/load-balancer-attributes: idle_timeout.timeout_seconds=330
+          alb.ingress.kubernetes.io/target-group-attributes: deregistration_delay.timeout_seconds=330
+          # HTTP only until a certificate is added: virtual keys travel in the clear.
+          # Narrow this to your own IP, or add TLS before sharing the endpoint.
+          alb.ingress.kubernetes.io/inbound-cidrs: 0.0.0.0/0
