@@ -22,3 +22,19 @@ output "ecr_repository_url" {
 output "vpc_id" {
   value = module.vpc.vpc_id
 }
+
+output "certificate_arn" {
+  description = "ACM certificate for domain_name; goes into the eks overlay's certificate-arn annotation."
+  value       = try(aws_acm_certificate.gateway[0].arn, null)
+}
+
+output "acm_validation_record" {
+  description = "Add this CNAME in Cloudflare (DNS only) so ACM can issue the certificate."
+  value = try({
+    for o in aws_acm_certificate.gateway[0].domain_validation_options : o.domain_name => {
+      type  = o.resource_record_type
+      name  = o.resource_record_name
+      value = o.resource_record_value
+    }
+  }, null)
+}

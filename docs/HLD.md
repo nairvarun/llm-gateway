@@ -180,7 +180,7 @@ Terraform creates AWS resources only; everything inside the cluster is a Kustomi
 
 **Deploy:** `terraform apply` → kubeconfig → baseline → push the image to ECR → secrets → `eks` overlay. **Tear down** in reverse, Kubernetes objects first, or the ALB and EBS volume Auto Mode created are orphaned and the VPC cannot be deleted.
 
-**Before sharing the endpoint:** the ALB is HTTP-only until an ACM certificate is added, so `inbound-cidrs` and `api_public_access_cidrs` are narrowed to the operator's IP.
+**Public endpoint:** `https://lmgate.nairvarun.com`, HTTPS only, with an ACM certificate validated through a Cloudflare DNS record. Both Cloudflare records are DNS only, because the proxy's 100-second timeout would cut long streams. The Kubernetes API is limited to the operator's IP.
 
 ## Key decisions and trade-offs
 
@@ -203,7 +203,7 @@ Each decision picks the simpler correct option and writes down what it gives up.
 | D19 | Terraform for AWS only; Kustomize for in-cluster objects | One tool for everything | No cluster credentials in Terraform, no provider state drift |
 | D20 | One NAT gateway, local state | Egress during an AZ outage; shared state | Lower cost and setup for a single operator |
 | D21 | ALB checks `/readyz`, 330 s idle and deregistration | Faster failover of dead connections | Long streams are not cut by the load balancer |
-| D22 | HTTP-only ALB until a certificate exists | Encryption in transit, for now | Needs a domain; exposure is narrowed by CIDR meanwhile |
+| D22 | HTTPS only at `lmgate.nairvarun.com`; Cloudflare DNS only | Cloudflare's proxy and caching | Keys never in the clear; long streams are not cut by a proxy timeout |
 
 ## Risks, open questions and milestones
 
@@ -218,7 +218,7 @@ The biggest risks are in streaming accounting and provider format drift. Both ar
 | Core outgrows 2,000 lines | Harder to explain | Cut tracing first, then simplify |
 | Model IDs or prices change | Wrong costs | Verify at build time; startup check that every model has a price |
 | Budget overspend under concurrency | Small overspend per key | Accepted and documented (D8) |
-| Virtual keys sent over plain HTTP | Key theft on the network | `inbound-cidrs` narrowed to the operator; ACM certificate and HTTPS listener before sharing (D22) |
+| Cloudflare record switched to proxied | Streams cut at 100 s; TLS terminated outside AWS | Both records documented as DNS only (D22) |
 | Teardown in the wrong order | Orphaned ALB and EBS volume; VPC delete fails | Delete Kubernetes objects before `terraform destroy` (runbook in `infra/eks/README.md`) |
 | Always-on AWS cost | Monthly bill while idle | Destroy the cluster when not in use; one NAT gateway |
 

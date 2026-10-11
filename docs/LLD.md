@@ -912,7 +912,7 @@ Build in spec phase order. Each phase ends with its tests green, its metric visi
 - [x] Kustomize base plus `k1` overlay (Recreate, PVC); `/internal/drain` and `test_drain_flips_readyz`
 - [x] EKS Auto Mode: Terraform in `infra/eks/`, baseline in `deploy/k8s/cluster/eks-auto/`, `eks` overlay (validated, not yet applied)
 - [ ] First apply on AWS: `terraform apply`, baseline, image push, `eks` overlay; smoke test through the ALB
-- [ ] TLS: ACM certificate and HTTPS listener on the ALB
+- [x] TLS: ACM certificate in Terraform, HTTPS-only listener for `lmgate.nairvarun.com` in the `eks` overlay (issued once the Cloudflare record exists)
 - [ ] K2: `store/postgres.py`, `limiter/redis.py`, `k2` overlay with PDB, HPA and metrics-server
 
 **Decisions taken in review**
@@ -939,6 +939,7 @@ Terraform in `infra/eks/` creates the AWS side; the cluster's contents stay in K
 | `iam.tf` | `aws_iam_role.cluster`, `aws_iam_role.node`, policy attachments via `for_each` | Cluster trust allows `sts:AssumeRole` and `sts:TagSession` |
 | `eks.tf` | `aws_cloudwatch_log_group.cluster`, `aws_eks_cluster.this`, `aws_eks_access_entry.admin`, `aws_eks_access_policy_association.admin` | Log group created first so retention is set |
 | `ecr.tf` | `aws_ecr_repository.gateway`, `aws_ecr_lifecycle_policy.gateway` | Immutable tags, scan on push, keep 20 |
+| `acm.tf` | `aws_acm_certificate.gateway` (when `domain_name` is set) | DNS validation; outputs `acm_validation_record` and `certificate_arn`; nothing waits for issuance |
 | `outputs.tf` | `cluster_name`, `region`, `cluster_endpoint`, `configure_kubectl`, `ecr_repository_url`, `vpc_id` | `configure_kubectl` is a ready-to-run command |
 
 ### Inputs
@@ -957,6 +958,7 @@ Terraform in `infra/eks/` creates the AWS side; the cluster's contents stay in K
 | `log_retention_days` | `30` | Log group retention |
 | `deletion_protection` | `false` | EKS deletion protection |
 | `ecr_force_delete` | `false` | Let `destroy` delete a repository that still has images |
+| `domain_name` | `""` | Public hostname; non-empty creates the ACM certificate (`lmgate.nairvarun.com` in `terraform.tfvars`) |
 
 ### Network layout
 
@@ -1041,16 +1043,21 @@ It builds on `k1` (Recreate, PVC) and adds:
 | `alb.ingress.kubernetes.io/healthcheck-path` | `/readyz` | The default `/` is a 404 here, and draining pods must fail the check |
 | `alb.ingress.kubernetes.io/load-balancer-attributes` | `idle_timeout.timeout_seconds=330` | The default 60 s would cut long streams |
 | `alb.ingress.kubernetes.io/target-group-attributes` | `deregistration_delay.timeout_seconds=330` | A draining pod keeps its streams up to `total_s` |
-| `alb.ingress.kubernetes.io/inbound-cidrs` | `0.0.0.0/0` (narrow it) | Limits exposure while the ALB is HTTP-only |
+| `alb.ingress.kubernetes.io/listen-ports` | `[{"HTTPS": 443}]` | HTTPS only; no port 80 listener |
+| `alb.ingress.kubernetes.io/certificate-arn` | the `certificate_arn` output | The ACM certificate for `lmgate.nairvarun.com` |
+| `alb.ingress.kubernetes.io/ssl-policy` | `ELBSecurityPolicy-TLS13-1-2-2021-06` | TLS 1.2 minimum, TLS 1.3 preferred |
+| `alb.ingress.kubernetes.io/inbound-cidrs` | `0.0.0.0/0` | Apps call from anywhere; TLS and virtual keys protect the endpoint |
+
+The Ingress rule also sets `host: lmgate.nairvarun.com`.
 
 ### Runbook
 
 1. `terraform init && terraform plan -out tfplan && terraform apply tfplan` (about 15 minutes).
-2. `$(terraform output -raw configure_kubectl)`.
+2. `$(terraform output -raw configure_kubectl)`, then add `terraform output acm_validation_record` as a DNS-only CNAME in Cloudflare and wait with `aws acm wait certificate-validated`.
 3. `kubectl apply -k deploy/k8s/cluster/eks-auto`.
-4. Log in to ECR, `docker buildx build --platform linux/amd64 -t "$ECR:<tag>" --push .`, then set the tag in the overlay.
+4. Log in to ECR, `docker buildx build --platform linux/amd64 -t "$ECR:<tag>" --push .`, then set the image tag and the `certificate-arn` annotation in the overlay.
 5. Fill `deploy/k8s/base/secrets.env`, then `kubectl apply -k deploy/k8s/overlays/eks`.
-6. Create a key over `kubectl port-forward` (the ALB does not route `/admin`), then call `/v1` through the ALB hostname from `kubectl get ingress`.
+6. Add a DNS-only CNAME `lmgate` → the ALB hostname from `kubectl get ingress` in Cloudflare. Create a key over `kubectl port-forward` (the ALB does not route `/admin`), then call `https://lmgate.nairvarun.com/v1`.
 
 Teardown is the reverse, with one hard rule: `kubectl delete -k deploy/k8s/overlays/eks` and wait for the PersistentVolume to disappear before `terraform destroy`. Otherwise the ALB and EBS volume are orphaned and the VPC cannot be deleted.
 
