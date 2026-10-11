@@ -1,0 +1,6 @@
+# Tools for building the explainer video (not needed by the gateway itself).
+playwright>=1.50
+kokoro-onnx>=0.6
+soundfile>=0.12
+# optional: the older Piper voice (--voice piper)
+piper-tts>=1.3

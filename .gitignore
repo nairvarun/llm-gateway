@@ -12,3 +12,6 @@ infra/**/*.tfstate
 infra/**/*.tfstate.*
 infra/**/terraform.tfvars
 infra/**/*.tfplan
+docs/video/out/
+docs/video/voice
+docs/video/.venv

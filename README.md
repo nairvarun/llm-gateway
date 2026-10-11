@@ -8,6 +8,7 @@ Kubernetes deployment. Clients use any OpenAI SDK; the gateway routes to OpenAI 
 - High-level design: [docs/HLD.md](docs/HLD.md)
 - Low-level design: [docs/LLD.md](docs/LLD.md)
 - What each phase taught: [docs/notes/](docs/notes/)
+- A 16-minute narrated explainer (script and build): [docs/video/](docs/video/README.md)
 
 ## Run it locally
 
