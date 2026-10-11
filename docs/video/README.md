@@ -22,7 +22,7 @@ mkdir -p voice
 curl -L -o voice/kokoro-v1.0.onnx https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx
 curl -L -o voice/voices-v1.0.bin https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin
 
-.venv/bin/python build.py all                      # default voice: af_heart
+.venv/bin/python build.py all                      # default voice: am_michael
 .venv/bin/python build.py tts --voice bm_george && .venv/bin/python build.py video   # change voice
 .venv/bin/python build.py render --only 5          # re-render one slide after editing slides.py
 ```

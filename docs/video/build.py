@@ -2,7 +2,7 @@
 
 Usage: python build.py [render|tts|video|all] [--only N] [--voice NAME]
 
---voice is a Kokoro voice (default af_heart; e.g. am_michael, bf_emma, bm_george) or "piper".
+--voice is a Kokoro voice (default am_michael; e.g. af_heart, bf_emma, bm_george) or "piper".
 """
 
 from __future__ import annotations
@@ -325,7 +325,7 @@ def video() -> None:
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else "all"
     only = int(sys.argv[sys.argv.index("--only") + 1]) if "--only" in sys.argv else None
-    voice = sys.argv[sys.argv.index("--voice") + 1] if "--voice" in sys.argv else "af_heart"
+    voice = sys.argv[sys.argv.index("--voice") + 1] if "--voice" in sys.argv else "am_michael"
     if cmd in ("render", "all"):
         render(only)
     if cmd in ("tts", "all"):
