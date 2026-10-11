@@ -1,5 +1,5 @@
-# K1 on EKS Auto Mode: the k1 overlay plus the ECR image, Auto Mode's ALB, and amd64 nodes.
-# Prerequisites: terraform in infra/eks, then the baseline in deploy/k8s/cluster/eks-auto.
+# K1 on EKS Auto Mode: the k1 overlay plus the ECR image, Auto Mode's ALB over HTTPS only,
+# and amd64 nodes. Prerequisites: terraform in infra/eks, then deploy/k8s/cluster/eks-auto.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
@@ -20,16 +20,24 @@ patches:
       - op: add
         path: /spec/ingressClassName
         value: alb
+      - op: add
+        path: /spec/rules/0/host
+        value: lmgate.nairvarun.com
       - op: replace
         path: /metadata/annotations
         value:
           alb.ingress.kubernetes.io/target-type: ip
           # The ALB must probe readiness, not "/" (which is a 404 here).
           alb.ingress.kubernetes.io/healthcheck-path: /readyz
+          # HTTPS only: no port 80 listener, so a key is never sent in the clear by mistake.
+          alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS": 443}]'
+          # Set to the certificate_arn terraform output (issued once the DNS record exists).
+          alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:REGION:ACCOUNT_ID:certificate/CERT_ID
+          alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-TLS13-1-2-2021-06
           # Streams can last up to timeouts.total_s (300 s): keep the ALB from cutting them,
           # and let draining targets finish in-flight streams.
           alb.ingress.kubernetes.io/load-balancer-attributes: idle_timeout.timeout_seconds=330
           alb.ingress.kubernetes.io/target-group-attributes: deregistration_delay.timeout_seconds=330
-          # HTTP only until a certificate is added: virtual keys travel in the clear.
-          # Narrow this to your own IP, or add TLS before sharing the endpoint.
+          # Apps call the gateway from anywhere; TLS plus virtual keys protect it. Narrow this if
+          # every caller has a known address.
           alb.ingress.kubernetes.io/inbound-cidrs: 0.0.0.0/0

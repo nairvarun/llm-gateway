@@ -73,3 +73,9 @@ variable "ecr_force_delete" {
   type        = bool
   default     = false
 }
+
+variable "domain_name" {
+  description = "Public hostname for the gateway, e.g. lmgate.example.com. Empty skips the certificate."
+  type        = string
+  default     = ""
+}

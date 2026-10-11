@@ -419,10 +419,14 @@ The cluster is Amazon EKS in Auto Mode, created with Terraform. Auto Mode means 
 - `deregistration_delay.timeout_seconds=330`: a draining pod keeps its in-flight streams for up to `timeouts.total_s`.
 - `target-type: ip`, so the ALB sends traffic straight to pod IPs.
 
-**Security gaps to close before sharing the endpoint**
+**Public endpoint and TLS**
 
-- The ALB listens on plain HTTP, so virtual keys cross the internet unencrypted. Until an ACM certificate and an HTTPS listener are added, `inbound-cidrs` on the Ingress is narrowed to the operator's IP, or the gateway is reached with `kubectl port-forward`.
-- `api_public_access_cidrs` defaults to `0.0.0.0/0` and is narrowed in `terraform.tfvars`.
+- The gateway is served at `https://lmgate.nairvarun.com`. Terraform requests an ACM certificate for `domain_name` with DNS validation; the validation CNAME is added in Cloudflare by hand, and nothing in Terraform waits for it.
+- The ALB has an HTTPS listener only (port 443, policy `ELBSecurityPolicy-TLS13-1-2-2021-06`) and no port 80 listener, so a key is never sent in the clear by a misconfigured client.
+- Both Cloudflare records are DNS only. Cloudflare's proxy would terminate TLS itself and end responses after its 100-second proxy timeout, which would cut long streams.
+- `inbound-cidrs` on the Ingress is `0.0.0.0/0`, because apps call the gateway from anywhere; TLS and virtual keys protect it.
+- `api_public_access_cidrs` (who can reach the Kubernetes API) is set to the operator's own address in `terraform.tfvars`.
+- Secrets are never committed or sent through chat: `secrets.env` exists only on the machine that runs `kubectl apply`.
 
 **Operations**
 
@@ -503,7 +507,7 @@ docs/
 | D19 | Terraform manages AWS resources only; in-cluster objects are Kustomize manifests applied with `kubectl`. | Terraform never needs cluster credentials, and there is no Kubernetes provider state to drift. |
 | D20 | One shared NAT gateway and local Terraform state by default. | Lower cost and no extra setup for a single operator; both are one setting to change. |
 | D21 | The ALB health-checks `/readyz` and its idle and deregistration timeouts are 330 s. | Matches the gateway's readiness and the longest allowed stream. |
-| D22 | HTTP-only ALB until a certificate exists, with `inbound-cidrs` narrowed meanwhile. | TLS needs a domain; until then exposure is limited instead of opened. |
+| D22 | HTTPS only at `lmgate.nairvarun.com` (ACM certificate, TLS 1.3 policy, no port 80); Cloudflare records are DNS only. | Keys are never sent in the clear, and Cloudflare's proxy timeout would cut long streams. |
 
 ## 12. Not building (do not reopen)
 
