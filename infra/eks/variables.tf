@@ -9,6 +9,18 @@ variable "name" {
   default     = "llm-gateway"
 }
 
+variable "environment" {
+  description = "Environment label for the Environment tag, e.g. dev or prod."
+  type        = string
+  default     = "dev"
+}
+
+variable "tags" {
+  description = "Extra tags applied to every taggable resource, on top of Project, Environment, ManagedBy and Repository."
+  type        = map(string)
+  default     = {}
+}
+
 variable "kubernetes_version" {
   description = "EKS Kubernetes version. Raise it one minor version at a time to upgrade."
   type        = string

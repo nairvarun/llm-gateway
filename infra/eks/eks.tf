@@ -6,6 +6,8 @@ resource "aws_cloudwatch_log_group" "cluster" {
   # Created up front so retention is ours, not "never expire".
   name              = "/aws/eks/${var.name}/cluster"
   retention_in_days = var.log_retention_days
+
+  tags = { Name = "${var.name}-cluster-logs" }
 }
 
 resource "aws_eks_cluster" "this" {
@@ -53,6 +55,8 @@ resource "aws_eks_cluster" "this" {
 
   enabled_cluster_log_types = var.control_plane_log_types
   deletion_protection       = var.deletion_protection
+
+  tags = { Name = var.name }
 
   # IAM must exist before the cluster and be deleted after it, or EKS cannot clean up the
   # EC2 resources it created (instances, security groups, load balancers).

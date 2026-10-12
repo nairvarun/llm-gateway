@@ -3,6 +3,8 @@ resource "aws_ecr_repository" "gateway" {
   image_tag_mutability = "IMMUTABLE" # a tag always means the same image
   force_delete         = var.ecr_force_delete
 
+  tags = { Name = var.name }
+
   image_scanning_configuration {
     scan_on_push = true
   }

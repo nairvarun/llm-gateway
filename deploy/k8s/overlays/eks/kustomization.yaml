@@ -41,3 +41,5 @@ patches:
           # Apps call the gateway from anywhere; TLS plus virtual keys protect it. Narrow this if
           # every caller has a known address.
           alb.ingress.kubernetes.io/inbound-cidrs: 0.0.0.0/0
+          # Tags on the ALB and its target groups; keep in step with local.tags in infra/eks/tags.tf.
+          alb.ingress.kubernetes.io/tags: Project=llm-gateway,Environment=dev,ManagedBy=terraform,Repository=nairvarun/llm-gateway
