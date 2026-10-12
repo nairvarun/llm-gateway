@@ -12,6 +12,7 @@ know about this environment. Branch: `v2`. Everything below is committed and pus
 | [LLD.md](LLD.md) | Low-level design: types, stages, algorithms, tests, Terraform; ends with implementation notes |
 | [notes/](notes/) | One learning note per phase |
 | [../infra/eks/README.md](../infra/eks/README.md) | AWS deploy runbook, Cloudflare DNS records, teardown order |
+| [RUNBOOK.md](RUNBOOK.md) | Step-by-step test of every gateway feature against the live deploy |
 | [video/README.md](video/README.md) | How the explainer video is built |
 
 Editable online copies exist ([HLD](https://claude.ai/code/artifact/95848d23-9e1f-4244-9978-0342112086ae),
