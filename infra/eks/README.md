@@ -22,8 +22,10 @@ Terraform never needs cluster credentials.
   gateway, the EC2 instances Auto Mode launches (plus its per-instance management fee), the ALB
   once the Ingress exists, and EBS. Check current prices for your region before applying, and
   `terraform destroy` when you are not using it.
-- **Narrow `api_public_access_cidrs`** to your own IP; the default lets anyone reach the API
-  endpoint (they still need valid AWS credentials).
+- **`api_public_access_cidrs` defaults to `0.0.0.0/0`.** Anyone can reach the Kubernetes API
+  endpoint, but they still need valid AWS credentials. That is the accepted setting when the
+  operator has no stable IP (CGNAT). If you later get a fixed-IP host (a bastion or similar), set
+  its `/32` here and re-apply.
 - **HTTPS only.** The ALB serves `https://lmgate.nairvarun.com` with an ACM certificate and has
   no port 80 listener. The certificate needs one DNS record in Cloudflare before it is issued
   (below), and the ALB will not come up until it is.
@@ -51,7 +53,7 @@ a trailing dot.
 ```bash
 # 1. Infrastructure (about 15 minutes)
 cd infra/eks
-cp terraform.tfvars.example terraform.tfvars        # region, domain_name, your IP
+cp terraform.tfvars.example terraform.tfvars        # region, domain_name
 terraform init
 terraform plan -out tfplan
 terraform apply tfplan

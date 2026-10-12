@@ -952,7 +952,7 @@ Terraform in `infra/eks/` creates the AWS side; the cluster's contents stay in K
 | `vpc_cidr` | `10.0.0.0/16` | VPC range |
 | `az_count` | `3` | Validated to 2–4 |
 | `single_nat_gateway` | `true` | One NAT (cheaper) vs one per AZ |
-| `api_public_access_cidrs` | `["0.0.0.0/0"]` | Who can reach the public API endpoint; narrow it |
+| `api_public_access_cidrs` | `["0.0.0.0/0"]` | Who can reach the public API endpoint; stays open while the operator has no stable IP, narrow it later |
 | `admin_principal_arns` | `[]` | Extra cluster admins (access entries) |
 | `control_plane_log_types` | `["audit", "authenticator"]` | CloudWatch control-plane logs |
 | `log_retention_days` | `30` | Log group retention |

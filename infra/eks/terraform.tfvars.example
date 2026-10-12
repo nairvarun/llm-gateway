@@ -4,8 +4,9 @@ region = "eu-west-1"
 # Public hostname; Terraform requests an ACM certificate for it.
 domain_name = "lmgate.nairvarun.com"
 
-# Only your machine can reach the Kubernetes API. Find your address with:
-#   curl -s https://checkip.amazonaws.com
-api_public_access_cidrs = ["203.0.113.10/32"]
+# Who can reach the Kubernetes API. The default is open to the internet (callers still need AWS
+# credentials). Narrow it if you have a stable address, e.g. ["203.0.113.10/32"]; behind CGNAT,
+# leave it open or reach the API from a fixed-IP host such as a bastion.
+# api_public_access_cidrs = ["0.0.0.0/0"]
 
 # admin_principal_arns = ["arn:aws:iam::123456789012:role/Admin"]

@@ -1,5 +1,5 @@
 # Gateway configuration. Mounted from a ConfigMap; secrets come from environment variables.
-# Model IDs and prices are PLACEHOLDERS: verify them against each provider before use.
+# Model IDs and prices verified against the providers' docs on 2026-10-12 and exercised live; re-check before relying on them.
 
 providers:
   openai:
@@ -13,16 +13,16 @@ providers:
 models:                       # client-facing aliases; first target is primary
   fast:
     targets:
-      - {provider: openai, model: gpt-4o-mini}
-      - {provider: anthropic, model: claude-haiku-latest}
+      - {provider: openai, model: gpt-6-luna}
+      - {provider: anthropic, model: claude-haiku-5-5}
   smart:
     targets:
-      - {provider: anthropic, model: claude-sonnet-latest}
+      - {provider: anthropic, model: claude-sonnet-5-5}
 
 pricing:                      # USD per 1M tokens, keyed by provider model ID
-  gpt-4o-mini: {input: 0.15, output: 0.60}
-  claude-haiku-latest: {input: 0.80, output: 4.00}
-  claude-sonnet-latest: {input: 3.00, output: 15.00}
+  gpt-6-luna: {input: 0.10, output: 0.50}
+  claude-haiku-5-5: {input: 0.10, output: 0.50}   # prompts up to 100k tokens; 0.50/2.50 above
+  claude-sonnet-5-5: {input: 2.00, output: 10.00}
 
 stages:
   cache: {enabled: true, max_entries: 1000, ttl_s: 300}

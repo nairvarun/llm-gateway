@@ -1,6 +1,6 @@
 # Handover
 
-State of the project at hand-off (2026-10-12), what to do next, and what a new session needs to
+State of the project at hand-off (2026-10-12, updated after the live smoke test), what to do next, and what a new session needs to
 know about this environment. Branch: `v2`. Everything below is committed and pushed.
 
 ## Read first
@@ -30,8 +30,15 @@ lack the LLD implementation notes and still describe the HTTP-only interim plan.
 | Dashboard and alert rules (`deploy/observability/`) | Written | Never loaded into Grafana/Prometheus |
 | Explainer video (`docs/video/`) | Done | 17-minute MP4, voice `am_michael`; output is git-ignored |
 
-Nothing has been tested against the real OpenAI or Anthropic APIs. Model IDs and prices in
-`deploy/k8s/base/config.yaml` are **placeholders**.
+**Live smoke test done (2026-10-12).** Real calls to OpenAI (`gpt-6-luna`) and Anthropic
+(`claude-sonnet-5-5`, `claude-haiku-5-5`) passed: non-streaming and streaming (incremental chunks,
+`[DONE]`), usage rows with real token counts and costs matching the verified prices, and fallback
+(dead OpenAI endpoint -> Haiku, `attempts = 2`). One bug found and fixed: newer OpenAI models reject
+`max_tokens`, so the OpenAI adapter now sends `max_completion_tokens`. Model IDs and prices in
+`deploy/k8s/base/config.yaml` and the SPEC example are verified. Notes: `gpt-6-luna` counts
+reasoning tokens against the completion budget, so very small `max_tokens` can truncate; Haiku 5.5
+is billed more above 100k prompt tokens, but the config has one flat price (the lower tier).
+CI workflow: `.github/workflows/ci.yml` (not yet run on GitHub; Terraform steps unverified locally).
 
 ## Decisions already made (do not reopen)
 
@@ -48,7 +55,7 @@ The spec's decision table (D1–D22) is authoritative. The ones most likely to c
 
 ## Next steps
 
-### 1. Live smoke test with the real providers (this is what the new session is for)
+### 1. Live smoke test with the real providers (DONE, kept for reference or re-runs)
 
 The user added two environment variables to this environment: `LMGATE_OPENAI_API_KEY` and
 `LMGATE_ANTHROPIC_API_KEY`. Check they are visible without printing them:
@@ -86,7 +93,7 @@ Then:
    example in the spec if it changed). Anthropic's live SSE events may differ from the recorded
    fixtures in `tests/providers/test_adapters.py`; if so, fix the adapter and add a fixture.
 
-### 2. CI (unblocked)
+### 2. CI (DONE: `.github/workflows/ci.yml`; check its first run on GitHub)
 
 GitHub Actions on push: `uv run ruff check`, `uv run ruff format --check`, `uv run pytest -q`,
 `docker build`, `terraform -chdir=infra/eks fmt -check` and `validate` (with `-backend=false`).
@@ -95,7 +102,7 @@ GitHub Actions on push: `uv run ruff check`, `uv run ruff format --check`, `uv r
 
 | Item | Notes |
 | --- | --- |
-| `terraform apply` from their machine | Fill `infra/eks/terraform.tfvars`: `region`, `domain_name = "lmgate.nairvarun.com"`, `api_public_access_cidrs = ["<their IP>/32"]` (`curl -s https://checkip.amazonaws.com`) |
+| `terraform apply` from their machine | Fill `infra/eks/terraform.tfvars`: `region`, `domain_name = "lmgate.nairvarun.com"`, leave `api_public_access_cidrs` at its default `0.0.0.0/0` (the user is behind CGNAT; IAM still gates the API; they may add a fixed-IP bastion later and narrow it) |
 | Cloudflare records (both CNAME, DNS only) | `terraform output acm_validation_record` after apply; then `lmgate` → the ALB hostname from `kubectl -n llm-gateway get ingress gateway` after deploy |
 | `secrets.env` on their machine | Provider keys + an `ADMIN_TOKEN` of at least 32 characters |
 | Set image tag and `certificate-arn` in `deploy/k8s/overlays/eks/kustomization.yaml` | From `ecr_repository_url` and `certificate_arn` outputs |

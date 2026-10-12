@@ -37,6 +37,10 @@ class OpenAIProvider:
         body = req.payload()
         body["model"] = model
         body["stream"] = stream
+        # Newer OpenAI models reject max_tokens; max_completion_tokens is accepted everywhere.
+        if "max_tokens" in body:
+            body.setdefault("max_completion_tokens", body["max_tokens"])
+            del body["max_tokens"]
         if stream:
             # Always ask for usage; route strips the usage chunk if the client did not ask.
             body["stream_options"] = {**(body.get("stream_options") or {}), "include_usage": True}

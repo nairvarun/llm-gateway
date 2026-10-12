@@ -78,6 +78,13 @@ async def test_openai_stream_parses_and_injects_usage():
     assert chunks[1].usage["completion_tokens"] == 1
 
 
+def test_openai_payload_sends_max_completion_tokens():
+    body = openai().payload(req(max_tokens=50), "m", stream=False)
+    assert body["max_completion_tokens"] == 50 and "max_tokens" not in body
+    body = openai().payload(req(max_tokens=50, max_completion_tokens=7), "m", stream=False)
+    assert body["max_completion_tokens"] == 7 and "max_tokens" not in body
+
+
 @respx.mock
 async def test_openai_truncated_stream_is_protocol_error():
     respx.post("https://oa.test/v1/chat/completions").mock(
