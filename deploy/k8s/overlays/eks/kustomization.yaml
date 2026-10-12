@@ -7,7 +7,7 @@ resources:
 images:
   - name: llm-gateway
     # Set to the ecr_repository_url terraform output and the tag you pushed.
-    newName: ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/llm-gateway
+    newName: 365712037872.dkr.ecr.ap-south-1.amazonaws.com/llm-gateway
     newTag: "0.2.0"
 patches:
   - target: {kind: Deployment, name: gateway}
@@ -32,7 +32,7 @@ patches:
           # HTTPS only: no port 80 listener, so a key is never sent in the clear by mistake.
           alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS": 443}]'
           # Set to the certificate_arn terraform output (issued once the DNS record exists).
-          alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:REGION:ACCOUNT_ID:certificate/CERT_ID
+          alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:ap-south-1:365712037872:certificate/9a326c1a-eee8-44e9-a851-53e00870b418
           alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-TLS13-1-2-2021-06
           # Streams can last up to timeouts.total_s (300 s): keep the ALB from cutting them,
           # and let draining targets finish in-flight streams.
