@@ -1,6 +1,6 @@
 # Every taggable resource gets these through the provider's default_tags (versions.tf), plus a
 # Name of its own. Add more with var.tags. Resources that Kubernetes creates later (the ALB) are
-# tagged from the Ingress annotation in deploy/k8s/overlays/eks/kustomization.yaml.
+# not tagged: AmazonEKSLoadBalancingPolicy rejects custom tag keys when Auto Mode creates them.
 locals {
   tags = merge(
     {
