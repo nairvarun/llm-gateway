@@ -145,16 +145,16 @@ providers:
 models:
   fast:
     targets:
-      - {provider: openai, model: gpt-4o-mini}
-      - {provider: anthropic, model: claude-haiku-latest}
+      - {provider: openai, model: gpt-6-luna}
+      - {provider: anthropic, model: claude-haiku-5-5}
   smart:
     targets:
-      - {provider: anthropic, model: claude-sonnet-latest}
+      - {provider: anthropic, model: claude-sonnet-5-5}
 
 pricing:            # USD per 1M tokens, keyed by provider model ID
-  gpt-4o-mini: {input: 0.15, output: 0.60}
-  claude-haiku-latest: {input: 0.80, output: 4.00}
-  claude-sonnet-latest: {input: 3.00, output: 15.00}
+  gpt-6-luna: {input: 0.10, output: 0.50}
+  claude-haiku-5-5: {input: 0.10, output: 0.50}   # prompts up to 100k tokens; 0.50/2.50 above
+  claude-sonnet-5-5: {input: 2.00, output: 10.00}
 
 stages:
   cache: {enabled: true, max_entries: 1000, ttl_s: 300}
@@ -394,7 +394,7 @@ The cluster is Amazon EKS in Auto Mode, created with Terraform. Auto Mode means 
 | VPC | 3 AZs; private /20 per AZ for nodes and pods, public /24 per AZ for the ALB | Pods take VPC IPs, so private subnets are large; subnets carry the `kubernetes.io/role/elb` and `internal-elb` tags Auto Mode uses to place load balancers |
 | NAT gateway | One, shared (`single_nat_gateway = true`) | Cheaper; an AZ outage can cut egress, which is acceptable for K1 |
 | EKS cluster | Kubernetes 1.35, Auto Mode with `system` and `general-purpose` node pools, `authentication_mode = API` | Compute, block storage and load balancing must be enabled together; self-managed add-ons are not bootstrapped |
-| API endpoint | Public and private; public access limited by `api_public_access_cidrs` | Reachable for `kubectl` without a VPN, but only from known addresses |
+| API endpoint | Public and private; public access limited by `api_public_access_cidrs` | Reachable for `kubectl` without a VPN; IAM credentials gate access, and the CIDR list can be narrowed later |
 | Upgrade policy | `STANDARD` | EKS upgrades the cluster at end of standard support instead of moving it into paid extended support |
 | IAM | Cluster role with the five Auto Mode managed policies; node role with `AmazonEKSWorkerNodeMinimalPolicy` and `AmazonEC2ContainerRegistryPullOnly` | Least privilege that Auto Mode supports |
 | Access | The identity running `terraform apply` is cluster admin; more via `admin_principal_arns` | Access entries instead of the old `aws-auth` ConfigMap |
@@ -425,7 +425,7 @@ The cluster is Amazon EKS in Auto Mode, created with Terraform. Auto Mode means 
 - The ALB has an HTTPS listener only (port 443, policy `ELBSecurityPolicy-TLS13-1-2-2021-06`) and no port 80 listener, so a key is never sent in the clear by a misconfigured client.
 - Both Cloudflare records are DNS only. Cloudflare's proxy would terminate TLS itself and end responses after its 100-second proxy timeout, which would cut long streams.
 - `inbound-cidrs` on the Ingress is `0.0.0.0/0`, because apps call the gateway from anywhere; TLS and virtual keys protect it.
-- `api_public_access_cidrs` (who can reach the Kubernetes API) is set to the operator's own address in `terraform.tfvars`.
+- `api_public_access_cidrs` (who can reach the Kubernetes API) stays at the default `0.0.0.0/0`, because the operator is behind CGNAT and has no stable address; IAM authentication still gates access. Narrow it later if a fixed-IP host becomes available.
 - Secrets are never committed or sent through chat: `secrets.env` exists only on the machine that runs `kubectl apply`.
 
 **Operations**
