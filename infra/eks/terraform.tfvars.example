@@ -9,4 +9,8 @@ domain_name = "lmgate.nairvarun.com"
 # leave it open or reach the API from a fixed-IP host such as a bastion.
 # api_public_access_cidrs = ["0.0.0.0/0"]
 
+# Extra tags on every resource (Project, Environment, ManagedBy and Repository are always set).
+# environment = "dev"
+# tags        = { Owner = "varun", CostCenter = "learning" }
+
 # admin_principal_arns = ["arn:aws:iam::123456789012:role/Admin"]

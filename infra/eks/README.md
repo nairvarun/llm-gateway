@@ -15,6 +15,7 @@ Terraform never needs cluster credentials.
 | Access | Whoever runs `terraform apply` gets cluster-admin; add others in `admin_principal_arns` |
 | Logs | `audit` and `authenticator` to CloudWatch, 30-day retention |
 | ECR | `llm-gateway`, immutable tags, scan on push, keeps the last 20 images |
+| Tags | `Project`, `Environment`, `ManagedBy`, `Repository` on every resource via provider `default_tags` (`tags.tf`), a `Name` on each, extra tags via `var.tags`; the ALB is tagged from an Ingress annotation | Cost allocation and ownership; Kubernetes-created resources are not covered by Terraform tags |
 
 ## Before you apply
 
